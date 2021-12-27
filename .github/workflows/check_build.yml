@@ -9,7 +9,7 @@ on:
   pull_request:
     branches: [manta]
   push:
-    branches: [manta]
+    branches: [ghzlatarev/pin-nightly-rust]
 
 env:
   AWS_REGION: us-east-1
@@ -89,6 +89,7 @@ jobs:
           rustup target add wasm32-unknown-unknown --toolchain nightly
           cargo +nightly install --git https://github.com/alexcrichton/wasm-gc --force
           rustup update
+          rustup show
       -
         name: Run yamllint
         uses: actionshub/yamllint@main
