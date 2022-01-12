@@ -5,9 +5,9 @@
 name: publish calamari parachain container
 # yamllint disable-line rule:truthy
 on:
-  release:
-    types:
-      - published
+  push:
+    branches: [ghzlatarev/test-docker]
+
 jobs:
   check-docker-hub-deploy:
     runs-on: ubuntu-20.04
