@@ -8,7 +8,9 @@ repository = 'https://github.com/Manta-Network/Manta/'
 version = '3.1.2'
 
 [dependencies]
-codec = { package = "parity-scale-codec", version = "2.3.1", default-features = false, features = ["derive", "max-encoded-len"] }
+#codec = { package = "parity-scale-codec", version = "2.3.1", default-features = false, features = ["derive", "max-encoded-len"] }
+parity-scale-codec = { version = "2.2", default-features = false, features = [ "derive", "max-encoded-len" ] }
+
 log = { version = "0.4.14", default-features = false }
 hex-literal = { version = '0.3.3', optional = true }
 scale-info = { version = "1.0.0", default-features = false, features = ["derive"] }
@@ -118,7 +120,8 @@ runtime-benchmarks = [
 	'pallet-treasury/runtime-benchmarks',
 ]
 std = [
-	'codec/std',
+	#'codec/std',
+	'parity-scale-codec/std',
 	'serde',
 	'sp-consensus-aura/std',
 	'pallet-aura/std',
