@@ -246,11 +246,11 @@ pub mod pallet {
 			// 	"there are more blocks per session than fit into BlockCount value type, increase size",
 			// );
 			assert!(
-				T::PerformancePercentileToConsiderForKick::get() > 100,
+				T::PerformancePercentileToConsiderForKick::get() < 100,
 				"Percentile must be given as number between 0 and 100",
 			);
 			assert!(
-				T::UnderperformPercentileByPercentToKick::get() > 100,
+				T::UnderperformPercentileByPercentToKick::get() <= 100,
 				"Kicking threshold must be given as number between 0 and 100",
 			);
 			<DesiredCandidates<T>>::put(&self.desired_candidates);
