@@ -512,9 +512,7 @@ pub mod pallet {
 			collators
 		}
 
-		pub fn kick_stale_candidates(
-			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
-		) -> Vec<T::AccountId> {
+		pub fn kick_stale_candidates() -> Vec<T::AccountId> {
 			// 1. Sort collator performance list (alternative: walk it twice instead of sorting, or do a heap sort in note_author)
 			// TODO RAD: use iter() and zero out BlocksPerCollatorThisSession explicitly?
 			let mut collator_perf_this_session =
@@ -523,18 +521,13 @@ pub mod pallet {
 			let no_of_candidates = collator_perf_this_session.len();
 
 			// 2. get percentile by inclusive nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
-			let ordinal_rank = math::round::ceil(
-				(T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0 // XXX: that high precision aint needed
-					* no_of_candidates as f64,
-				0,
-			) as usize;
+			let ordinal_rank = ((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
+				* no_of_candidates as f64) as usize;
 			// 3. Take largest number in slice, this is the performance benchmark
 			let blocks_created_at_percentile = collator_perf_this_session[ordinal_rank].1;
 			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
-			let threshold_factor = math::round::ceil(
-				1.0 - T::UnderperformPercentileByPercentToKick::get() as f64 / 100.0,
-				0,
-			) as u32;
+			let threshold_factor =
+				(1.0 - T::UnderperformPercentileByPercentToKick::get() as f64 / 100.0) as u32;
 			let kick_threshold = blocks_created_at_percentile
 				.checked_mul(threshold_factor)
 				.unwrap_or_else(|| {
@@ -637,7 +630,7 @@ pub mod pallet {
 			// <BlocksPerCollatorThisSession<T>>::translate_values(
 			// 	|_: BlockCount| -> Option<BlockCount> { Some(0u32.into()) },
 			// );
-			<BlocksPerCollatorThisSession<T>>::translate_values(|v: BlockCount| Some(0u32.into()));
+			<BlocksPerCollatorThisSession<T>>::translate_values(|_: BlockCount| Some(0u32.into()));
 		}
 		fn end_session(_: SessionIndex) {
 			// we don't care.
