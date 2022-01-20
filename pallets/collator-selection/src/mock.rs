@@ -167,6 +167,8 @@ impl pallet_session::SessionHandler<u64> for TestSessionHandler {
 parameter_types! {
 	pub const Offset: u64 = 0;
 	pub const Period: u64 = 10;
+	pub const PerformancePercentileToConsiderForKick : u8 = 80;
+	pub const UnderperformPercentileByPercentToKick  : u8 = 10;
 }
 
 impl pallet_session::Config for Test {
@@ -211,7 +213,8 @@ impl Config for Test {
 	type PotId = PotId;
 	type MaxCandidates = MaxCandidates;
 	type MaxInvulnerables = MaxInvulnerables;
-	type KickThreshold = Period;
+	type PerformancePercentileToConsiderForKick = PerformancePercentileToConsiderForKick;
+	type UnderperformPercentileByPercentToKick = UnderperformPercentileByPercentToKick;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = IdentityCollator;
 	type ValidatorRegistration = IsRegistered;
