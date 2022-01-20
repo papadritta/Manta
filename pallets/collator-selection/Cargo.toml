@@ -18,6 +18,7 @@ codec              = { version = '2.3.1', default-features = false, features = [
 rand               = { version = "0.7.2", default-features = false }
 scale-info         = { version = "1.0.0", default-features = false, features = ["derive"] }
 serde              = { version = "1.0.119", default-features = false }
+libmath			   = "0.2.1"
 
 sp-std             = { git = 'https://github.com/paritytech/substrate.git', default-features = false, branch = "polkadot-v0.9.13" }
 sp-runtime         = { git = 'https://github.com/paritytech/substrate.git', default-features = false, branch = "polkadot-v0.9.13" }

@@ -136,8 +136,11 @@ pub mod pallet {
 		/// Used only for benchmarking.
 		type MaxInvulnerables: Get<u32>;
 
-		// Will be kicked if block is not produced in threshold.
-		type KickThreshold: Get<Self::BlockNumber>;
+		// n-th Percentile of lowest-performing collators to be checked for kicking
+		type PerformancePercentileToConsiderForKick: Get<u8>;
+
+		// If a collator underperforms the percentile by more than this, it'll be kicked
+		type UnderperformPercentileByPercentToKick: Get<u8>;
 
 		/// A stable ID for a validator.
 		type ValidatorId: Member + Parameter;
@@ -178,11 +181,15 @@ pub mod pallet {
 	pub type Candidates<T: Config> =
 		StorageValue<_, Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>, ValueQuery>;
 
-	/// Last block authored by collator.
+	// RAD Add collator performance map storage item, compare with Acala
+	pub(super) type BlockCount = u32;
+	#[pallet::type_value]
+	pub(super) fn StartingBlockCount() -> BlockCount {
+		0u32.into()
+	}
 	#[pallet::storage]
-	#[pallet::getter(fn last_authored_block)]
-	pub type LastAuthoredBlock<T: Config> =
-		StorageMap<_, Twox64Concat, T::AccountId, T::BlockNumber, ValueQuery>;
+	pub(super) type BlocksPerCollatorThisSession<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>; // RAD: Note: AccountId is user-selectable
 
 	/// Desired number of candidates.
 	///
@@ -234,7 +241,18 @@ pub mod pallet {
 				T::MaxCandidates::get() >= self.desired_candidates,
 				"genesis desired_candidates are more than T::MaxCandidates",
 			);
-
+			// assert!(// RAD: Is there a way to make this check?
+			// 	T::Period > BlockCount::MAX,
+			// 	"there are more blocks per session than fit into BlockCount value type, increase size",
+			// );
+			assert!(
+				T::PerformancePercentileToConsiderForKick::get() > 100,
+				"Percentile must be given as number between 0 and 100",
+			);
+			assert!(
+				T::UnderperformPercentileByPercentToKick::get() > 100,
+				"Kicking threshold must be given as number between 0 and 100",
+			);
 			<DesiredCandidates<T>>::put(&self.desired_candidates);
 			<CandidacyBond<T>>::put(&self.candidacy_bond);
 			<Invulnerables<T>>::put(&self.invulnerables);
@@ -368,10 +386,7 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&who, deposit)?;
 						candidates.push(incoming);
-						<LastAuthoredBlock<T>>::insert(
-							who.clone(),
-							frame_system::Pallet::<T>::block_number() + T::KickThreshold::get(),
-						);
+						<BlocksPerCollatorThisSession<T>>::insert(who.clone(), 0u32);
 						Ok(candidates.len())
 					}
 				})?;
@@ -425,10 +440,7 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&new_candidate, deposit)?;
 						candidates.push(incoming);
-						<LastAuthoredBlock<T>>::insert(
-							new_candidate.clone(),
-							frame_system::Pallet::<T>::block_number() + T::KickThreshold::get(),
-						);
+						<BlocksPerCollatorThisSession<T>>::insert(new_candidate.clone(), 0u32);
 						Ok(candidates.len())
 					}
 				})?;
@@ -484,7 +496,7 @@ pub mod pallet {
 						.ok_or(Error::<T>::NotCandidate)?;
 					T::Currency::unreserve(who, candidates[index].deposit);
 					candidates.remove(index);
-					<LastAuthoredBlock<T>>::remove(who.clone());
+					<BlocksPerCollatorThisSession<T>>::remove(who.clone());
 					Ok(candidates.len())
 				})?;
 			Self::deposit_event(Event::CandidateRemoved(who.clone()));
@@ -499,29 +511,68 @@ pub mod pallet {
 			collators.extend(candidates.into_iter().collect::<Vec<_>>());
 			collators
 		}
-		/// Kicks out and candidates that did not produce a block in the kick threshold.
+
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
 		) -> Vec<T::AccountId> {
-			let now = frame_system::Pallet::<T>::block_number();
-			let kick_threshold = T::KickThreshold::get();
-			candidates
-				.into_iter()
-				.filter_map(|c| {
-					let last_block = <LastAuthoredBlock<T>>::get(c.who.clone());
-					let since_last = now.saturating_sub(last_block);
-					if since_last < kick_threshold {
-						Some(c.who)
-					} else {
-						let outcome = Self::try_remove_candidate(&c.who);
-						if let Err(why) = outcome {
-							log::warn!("Failed to remove candidate {:?}", why);
-							debug_assert!(false, "failed to remove candidate {:?}", why);
-						}
-						None
-					}
-				})
-				.collect::<Vec<_>>()
+			// 1. Sort collator performance list (alternative: walk it twice instead of sorting, or do a heap sort in note_author)
+			// TODO RAD: use iter() and zero out BlocksPerCollatorThisSession explicitly?
+			let mut collator_perf_this_session =
+				<BlocksPerCollatorThisSession<T>>::drain().collect::<Vec<_>>();
+			collator_perf_this_session.sort_unstable_by_key(|k| k.1);
+			let no_of_candidates = collator_perf_this_session.len();
+
+			// 2. get percentile by inclusive nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
+			let ordinal_rank = math::round::ceil(
+				(T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0 // XXX: that high precision aint needed
+					* no_of_candidates as f64,
+				0,
+			) as usize;
+			// 3. Take largest number in slice, this is the performance benchmark
+			let blocks_created_at_percentile = collator_perf_this_session[ordinal_rank].1;
+			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
+			let threshold_factor = math::round::ceil(
+				1.0 - T::UnderperformPercentileByPercentToKick::get() as f64 / 100.0,
+				0,
+			) as u32;
+			let kick_threshold = blocks_created_at_percentile
+				.checked_mul(threshold_factor)
+				.unwrap_or_else(|| {
+					log::warn!("kick threshold overflowed, kicking disabled");
+					0
+				}); // No overflow as threshold factor is 0<-1, on overflow, just disable kicking
+
+			log::info!("Session stats: n-th percentile: {blocks_created_at_percentile}\nWill kick under {kick_threshold} blocks");
+
+			// 5. Walk the percentile slice, call try_remove_candidate if a collator is under threshold
+
+			let mut active_account_ids = collator_perf_this_session[..ordinal_rank]
+				.iter()
+				.map(|acc_info| acc_info.0.clone())
+				.collect::<Vec<_>>();
+			let kick_candidates = collator_perf_this_session[ordinal_rank..]
+				.iter()
+				.map(|acc_info| acc_info.0.clone())
+				.collect::<Vec<_>>();
+			// active_candidates
+			// 	.into_iter()
+			// 	.map(|candidate_info| -> T::AccountId { candidate_info.who })
+			// 	.collect::<Vec<_>>();
+			kick_candidates.into_iter().for_each(|acc_id| {
+				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // XXX: Wont work if draining above
+				if my_blocks_this_session >= kick_threshold {
+					active_account_ids.push(acc_id);
+				} else {
+					Self::try_remove_candidate(&acc_id).unwrap_or_else(|why| -> usize {
+						log::warn!("Failed to remove candidate {:?}", why);
+						debug_assert!(false, "failed to remove candidate {:?}", why);
+						active_account_ids.push(acc_id); // readd to candidates
+						active_account_ids.len() // RAD: Compute this correctly
+					});
+				}
+			});
+			// RAD: TODO: check that candidates in storage and this array are same size
+			active_account_ids
 		}
 	}
 
@@ -540,7 +591,12 @@ pub mod pallet {
 			// `reward` is half of pot account minus ED, this should never fail.
 			let _success = T::Currency::transfer(&pot, &author, reward, KeepAlive);
 			debug_assert!(_success.is_ok());
-			<LastAuthoredBlock<T>>::insert(author, frame_system::Pallet::<T>::block_number());
+
+			// increment blocks this node authored // RAD: Do sanity checks
+			let mut authored_blocks = <BlocksPerCollatorThisSession<T>>::get(&author);
+			// 	.ok_or(Error::<T>::NotCandidate)?;
+			authored_blocks = authored_blocks.saturating_add(1u32);
+			<BlocksPerCollatorThisSession<T>>::insert(&author, authored_blocks);
 
 			frame_system::Pallet::<T>::register_extra_weight_unchecked(
 				T::WeightInfo::note_author(),
@@ -549,6 +605,7 @@ pub mod pallet {
 		}
 
 		fn note_uncle(_author: T::AccountId, _age: T::BlockNumber) {
+			// RAD: Can't really have uncles in a PoA round-robin (Aura) system
 			//TODO can we ignore this?
 		}
 	}
@@ -576,7 +633,11 @@ pub mod pallet {
 			Some(result)
 		}
 		fn start_session(_: SessionIndex) {
-			// we don't care.
+			// Reset collator block count to 0
+			// <BlocksPerCollatorThisSession<T>>::translate_values(
+			// 	|_: BlockCount| -> Option<BlockCount> { Some(0u32.into()) },
+			// );
+			<BlocksPerCollatorThisSession<T>>::translate_values(|v: BlockCount| Some(0u32.into()));
 		}
 		fn end_session(_: SessionIndex) {
 			// we don't care.
