@@ -26,10 +26,11 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_api::impl_runtime_apis;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::{crypto::KeyTypeId, sr25519, OpaqueMetadata};
+
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
-	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, Hash as HashT},
+	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, Hash as HashT, IdentityLookup},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult,
 };
@@ -253,6 +254,7 @@ impl Contains<Call> for BaseFilter {
 				| manta_collator_selection::Call::leave_intent{..})
 			| Call::Balances(_)
 			| Call::Assets(_)
+			| Call::AssetManager(_)
 			| Call::Utility(_) => true,
 			_ => false,
 			// Filter Session and CollatorSelection to prevent users from utility operation.
@@ -269,6 +271,7 @@ impl frame_system::Config for Runtime {
 	type AccountId = AccountId;
 	type Call = Call;
 	type Lookup = AccountIdLookup<AccountId, ()>;
+	//type Lookup = IdentityLookup<AccountId>;
 	type Index = Index;
 	type BlockNumber = BlockNumber;
 	type Hash = Hash;
@@ -847,7 +850,8 @@ impl pallet_xcm::Config for Runtime {
 	type XcmExecutor = XcmExecutor;
 	type XcmTeleportFilter = Everything;
 	type XcmReserveTransferFilter = Everything;
-	type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+	//type Weigher = FixedWeightBounds<UnitWeightCost, Call, MaxInstructions>;
+	type Weigher = XcmWeigher;
 	type LocationInverter = LocationInverter<Ancestry>;
 	type AdvertisedXcmVersion = pallet_xcm::CurrentXcmVersion;
 }
@@ -945,6 +949,25 @@ impl From<AssetType> for AssetId {
 	}
 }
 
+// type AccountPublic = <Signature as Verify>::Signer;
+// /// Helper function to generate an account ID from seed
+// pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
+// where
+// 	AccountPublic: From<<TPublic::Pair as Pair>::Public>,
+// {
+// 	AccountPublic::from(get_pair_from_seed::<TPublic>(seed)).into_account()
+// }
+
+parameter_types! {
+	pub KaruraFoundationAccounts: Vec<AccountId> = vec![
+		hex_literal::hex!["d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d"].into(),	// tij5W2NzmtxxAbwudwiZpif9ScmZfgFYdzrJWKYq6oNbSNH
+		// hex_literal::hex!["41dd2515ea11692c02306b68a2c6ff69b6606ebddaac40682789cfab300971c4"].into(),	// pndshZqDAC9GutDvv7LzhGhgWeGv5YX9puFA8xDidHXCyjd
+		// hex_literal::hex!["dad0a28c620ba73b51234b1b2ae35064d90ee847e2c37f9268294646c5af65eb"].into(),	// tFBV65Ts7wpQPxGM6PET9euNzp4pXdi9DVtgLZDJoFveR9F
+		// TreasuryPalletId::get().into_account(),
+		// TreasuryReservePalletId::get().into_account(),
+	];
+}
+
 // We instruct how to register the Assets
 // In this case, we tell it to Create an Asset in pallet-assets
 pub struct AssetRegistrar;
@@ -962,11 +985,20 @@ impl pallet_asset_manager::AssetRegistrar<Runtime> for AssetRegistrar {
 			Origin::root(),
 			asset,
 			//AssetManager::account_id(),
-			sp_runtime::MultiAddress::Id(AssetManager::account_id()),
+			//PalletId(*b"asstmngr"),
+			//AccountId32("\\Alice"),
+			//sp_runtime::MultiAddress::Id(AssetManager::account_id()),
+			// sp_runtime::MultiAddress::Id(AccountId::from(
+			// 	<sp_core::sr25519::Public as TraitPublic>::Pair::from_string("Alice", None)
+			// 		.expect("static values are valid; qed")
+			// 		.public(),
+			// )),
+			//get_account_id_from_seed::<sr25519::Public>("//Alice"),
+			//sp_runtime::MultiAddress::Id(AccountId::from_ss58check("//Alice")),
+			sp_runtime::MultiAddress::Id(KaruraFoundationAccounts::get()[0].clone()),
 			is_sufficient,
 			min_balance,
 		)?;
-
 		// TODO uncomment when we feel comfortable
 		/*
 		// The asset has been created. Let's put the revert code in the precompile address
