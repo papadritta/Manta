@@ -318,51 +318,48 @@ fn session_management_works() {
 	});
 }
 #[test]
-// fn bad_collators_are_removed() {
-// 	new_test_ext().execute_with(|| {
-// 		// add a new collator
-// 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
-// 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
+fn kick_mechanism() {
+	new_test_ext().execute_with(|| {
+		// add a new collator
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
+		// CollatorSelection::BlocksPerCollatorThisSession::get(1);
+		// crate::BlocksPerCollatorThisSession<Test>::get(1);
+		// CollatorSelection::pallet::BlocksPerCollatorThisSession::get(1);
+		// let b = <pallet::Pallet<mock::Test> as Config>::BlocksPerCollatorThisSessio::get(
+		// 	Origin::signed(1),
+		// );
+		let a = collator_selection::BlocksPerCollatorThisSession::<Test>::get(Origin::signed(1));
+		let aid = RootAccount::get();
+		let b = Balances::free_balance(aid);
+		// assert_eq!(
+		// 	CollatorSelection::BlocksPerCollatorThisSession::<Test>::get(Origin::signed(1)),
+		// 	0
+		// );
+		// assert_eq!(
+		// 	CollatorSelection::BlocksPerCollatorThisSession::get(Origin::signed(2)),
+		// 	0
+		// );
+		// assert_eq!(
+		// 	CollatorSelection::BlocksPerCollatorThisSession::get(Origin::signed(3)),
+		// 	0
+		// );
+		// assert_eq!(
+		// 	CollatorSelection::BlocksPerCollatorThisSession::get(Origin::signed(4)),
+		// 	0
+		// );
 
-// 		// RAD: How to mutate storage items from here?
-// 		<pallet::Pallet<mock::Test>>::BlocksPerCollatorThisSession::insert(Origin::signed(1), 10);
-// 		// BCollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(2), 10);
-// 		// CollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(3), 0);
-// 		// CollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(4), 10);
-// 		assert_eq!(
-// 			CollatorSelection::kick_stale_candidates(),
-// 			vec![Origin::signed(1), Origin::signed(2), Origin::signed(4)]
-// 		);
-// 	});
-// }
-// #[test]
-// #[ignore = "this was for kicking on subsequent block misses"]
-// fn kick_mechanism() {
-// 	new_test_ext().execute_with(|| {
-// 		// add a new collator
-// 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
-// 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
-// 		initialize_to_block(10);
-// 		assert_eq!(CollatorSelection::candidates().len(), 2);
-// 		initialize_to_block(20);
-// 		assert_eq!(SessionChangeBlock::get(), 20);
-// 		// 4 authored this block, gets to stay 3 was kicked
-// 		assert_eq!(CollatorSelection::candidates().len(), 1);
-// 		// 3 will be kicked after 1 session delay
-// 		assert_eq!(SessionHandlerCollators::get(), vec![1, 2, 3, 4]);
-// 		let collator = CandidateInfo {
-// 			who: 4,
-// 			deposit: 10,
-// 		};
-// 		assert_eq!(CollatorSelection::candidates(), vec![collator]);
-// 		assert_eq!(CollatorSelection::last_authored_block(4), 20);
-// 		initialize_to_block(30);
-// 		// 3 gets kicked after 1 session delay
-// 		assert_eq!(SessionHandlerCollators::get(), vec![1, 2, 4]);
-// 		// kicked collator gets funds back
-// 		assert_eq!(Balances::free_balance(3), 100);
-// 	});
-// }
+		// RAD: How to mutate storage items from here?
+		// <pallet::Pallet<mock::Test>>::BlocksPerCollatorThisSession::insert(Origin::signed(1), 10);
+		// BCollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(2), 10);
+		// CollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(3), 0);
+		// CollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(4), 10);
+		// assert_eq!(
+		// 	CollatorSelection::kick_stale_candidates(),
+		// 	vec![Origin::signed(1), Origin::signed(2), Origin::signed(4)]
+		// );
+	});
+}
 #[test]
 #[should_panic = "duplicate invulnerables in genesis."]
 fn cannot_set_genesis_value_twice() {

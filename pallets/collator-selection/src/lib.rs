@@ -95,6 +95,9 @@ pub mod pallet {
 	};
 	use frame_system::{pallet_prelude::*, Config as SystemConfig};
 	use pallet_session::SessionManager;
+	fn validators<T: pallet_session::Config>() -> Vec<<T as pallet_session::Config>::ValidatorId> {
+		<pallet_session::Pallet<T>>::validators()
+	}
 	use sp_runtime::traits::Convert;
 	use sp_staking::SessionIndex;
 
@@ -386,7 +389,7 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&who, deposit)?;
 						candidates.push(incoming);
-						<BlocksPerCollatorThisSession<T>>::insert(who.clone(), 0u32);
+						// <BlocksPerCollatorThisSession<T>>::insert(who.clone(), 0u32); // TODO: This must happen when the candidate is registered as collator, not here
 						Ok(candidates.len())
 					}
 				})?;
@@ -440,7 +443,7 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&new_candidate, deposit)?;
 						candidates.push(incoming);
-						<BlocksPerCollatorThisSession<T>>::insert(new_candidate.clone(), 0u32);
+						// <BlocksPerCollatorThisSession<T>>::insert(new_candidate.clone(), 0u32);
 						Ok(candidates.len())
 					}
 				})?;
@@ -512,8 +515,14 @@ pub mod pallet {
 			collators
 		}
 
-		pub fn kick_stale_candidates() -> Vec<T::AccountId> {
+		pub fn kick_stale_candidates(
+			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
+		) -> Vec<T::AccountId> {
 			// 0. TODO: All sanity checks
+			// At genesis session, new_session is called with empty set of candidates, nothing to kick
+			if candidates.is_empty() {
+				return vec![];
+			}
 
 			// 1. Sort collator performance list
 			let mut collator_perf_this_session =
@@ -546,13 +555,17 @@ pub mod pallet {
 			kick_candidates.into_iter().for_each(|acc_id| {
 				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find in collator_perf_this_session vec
 				if my_blocks_this_session >= kick_threshold {
-					safe_account_ids.push(acc_id);
+					if !Self::invulnerables().contains(&acc_id) {
+						safe_account_ids.push(acc_id);
+					}
 				} else {
 					Self::try_remove_candidate(&acc_id).unwrap_or_else(|why| -> usize {
 						log::warn!("Failed to remove candidate {:?}", why);
 						debug_assert!(false, "failed to remove candidate {:?}", why);
-						safe_account_ids.push(acc_id); // readd to candidates
-						safe_account_ids.len() // RAD: Compute this correctly
+						if !Self::invulnerables().contains(&acc_id) {
+							safe_account_ids.push(acc_id); // readd to candidates
+						}
+						safe_account_ids.len() // RAD: Compute this correctly or just ignore?
 					});
 				}
 			});
@@ -606,7 +619,7 @@ pub mod pallet {
 
 			let candidates = Self::candidates();
 			let candidates_len_before = candidates.len();
-			let active_candidates = Self::kick_stale_candidates();
+			let active_candidates = Self::kick_stale_candidates(candidates);
 			let active_candidates_len = active_candidates.len();
 			let result = Self::assemble_collators(active_candidates);
 			let removed = candidates_len_before - active_candidates_len;
@@ -619,7 +632,13 @@ pub mod pallet {
 		}
 		fn start_session(_: SessionIndex) {
 			// Reset collator block counts to 0
+			// FIXME: 0 the map and add new collators or drop and recreate from scratch?
 			<BlocksPerCollatorThisSession<T>>::translate_values(|_: BlockCount| Some(0u32.into()));
+			// for v in validators() {
+			// 	if !<BlocksPerCollatorThisSession<T>>::contains_key(v) {
+			// 		<BlocksPerCollatorThisSession<T>>::insert((v as T::AccountId).clone(), 0u32);
+			// 	}
+			// }
 			// RAD: Does this need a call to register_extra_weight too?
 		}
 		fn end_session(_: SessionIndex) {
