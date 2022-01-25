@@ -352,6 +352,53 @@ fn kick_algorithm() {
 	});
 }
 #[test]
+fn kick_mechanism() {
+	new_test_ext().execute_with(|| {
+		initialize_to_block(4);
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|(aid, _)| {
+			println!("{aid:?}");
+		});
+
+		// add new collator candidates
+		assert_ok!(CollatorSelection::set_desired_candidates(
+			Origin::signed(RootAccount::get()),
+			5
+		));
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
+
+		// Registering as candidates does nothing to the storage item,
+		// it gets populated on start of the session where they become active validators
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|(aid, _)| {
+			println!("{aid:?}");
+		});
+
+		initialize_to_block(49); // 3 sessions later they should be active
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|(aid, _)| {
+			println!("{aid:?}");
+		});
+
+		// let's assume collator 4 produced 1 block only
+		// everyone else had 2, default percentile is 2, threshold becomes 1, we kick
+		BlocksPerCollatorThisSession::<Test>::insert(4u64, 1);
+		// RAD: How to mutate storage items from here?
+		// assert_eq!(CollatorSelection::kick_stale_candidates(), vec![3, 5]);
+		initialize_to_block(51); // 3 sessions later they should be active
+						 // session changed, 4 should be removed from candidates
+		assert_eq!(
+			CollatorSelection::candidates()
+				.iter()
+				.map(|x| { x.who.clone() })
+				.collect::<Vec<_>>(),
+			vec![3, 5]
+		);
+		initialize_to_block(61);
+		// session changed again, 4 should no longer be an active validator
+		assert_eq!(Session::validators(), vec![1, 2, 3, 5]);
+	});
+}
+#[test]
 #[should_panic = "duplicate invulnerables in genesis."]
 fn cannot_set_genesis_value_twice() {
 	sp_tracing::try_init_simple();

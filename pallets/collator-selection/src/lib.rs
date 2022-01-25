@@ -95,9 +95,6 @@ pub mod pallet {
 	};
 	use frame_system::{pallet_prelude::*, Config as SystemConfig};
 	use pallet_session::SessionManager;
-	fn validators<T: pallet_session::Config>() -> Vec<<T as pallet_session::Config>::ValidatorId> {
-		<pallet_session::Pallet<T>>::validators()
-	}
 	use sp_runtime::traits::Convert;
 	use sp_staking::SessionIndex;
 
@@ -639,7 +636,8 @@ pub mod pallet {
 		fn start_session(_: SessionIndex) {
 			// Reset collator block counts to 0
 			// FIXME: 0 the map and add new collators or drop and recreate from scratch?
-			<BlocksPerCollatorThisSession<T>>::translate_values(|_: BlockCount| Some(0u32.into()));
+			<BlocksPerCollatorThisSession<T>>::remove_all(None);
+			let validators = Session::validators();
 			// for v in validators() {
 			// 	if !<BlocksPerCollatorThisSession<T>>::contains_key(v) {
 			// 		<BlocksPerCollatorThisSession<T>>::insert((v as T::AccountId).clone(), 0u32);
