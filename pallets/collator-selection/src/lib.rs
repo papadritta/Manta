@@ -515,25 +515,25 @@ pub mod pallet {
 			collators
 		}
 
-		pub fn kick_stale_candidates(
-			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
-		) -> Vec<T::AccountId> {
+		/// Removes collators with unsatisfactory performance
+		/// Returns the removed AccountIds
+		pub fn kick_stale_candidates() -> Vec<T::AccountId> {
 			// 0. TODO: All sanity checks
-			// At genesis session, new_session is called with empty set of candidates, nothing to kick
-			if candidates.is_empty() {
-				return vec![];
-			}
-
-			// 1. Sort collator performance list
 			let mut collator_perf_this_session =
 				<BlocksPerCollatorThisSession<T>>::iter().collect::<Vec<_>>();
+			if collator_perf_this_session.is_empty() {
+				return Vec::new();
+			}
+			// 1. Sort collator performance list
 			collator_perf_this_session.sort_unstable_by_key(|k| k.1); // XXX: don't like the tuple accessor, could this be a struct?
+														  // collator_perf_this_session.reverse();
 			let no_of_candidates = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
-			let ordinal_rank = ((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
-				* no_of_candidates as f64) as usize;
-			// 3. Block number at rank is the percentile and our kick performance benchmark
+			let ordinal_rank = (((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
+				* no_of_candidates as f64) as usize)
+				.saturating_sub(1); // Note: -1 to accomodate 0-index counting
+					// 3. Block number at rank is the percentile and our kick performance benchmark
 			let blocks_created_at_percentile: BlockCount =
 				collator_perf_this_session[ordinal_rank].1; // XXX: don't like the tuple accessor, could this be a struct?
 											// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
@@ -544,33 +544,28 @@ pub mod pallet {
 			log::info!("Session Performance stats: {}-th percentile: {blocks_created_at_percentile} blocks\nWill kick under {kick_threshold} blocks",T::PerformancePercentileToConsiderForKick::get());
 
 			// 5. Walk the percentile slice, call try_remove_candidate if a collator is under threshold
-			let mut safe_account_ids = collator_perf_this_session[ordinal_rank..]
-				.iter()
-				.map(|acc_info| acc_info.0.clone())
-				.collect::<Vec<_>>();
-			let kick_candidates = collator_perf_this_session[..ordinal_rank] // the collator at ordinal_rank is safe
+			let mut removed_account_ids: Vec<T::AccountId> = Vec::new();
+			let kick_candidates = collator_perf_this_session[..ordinal_rank] // ordinal-rank exclusive, the collator with percentile perf is safe
 				.iter()
 				.map(|acc_info| acc_info.0.clone())
 				.collect::<Vec<_>>();
 			kick_candidates.into_iter().for_each(|acc_id| {
 				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find in collator_perf_this_session vec
-				if my_blocks_this_session >= kick_threshold {
+				if my_blocks_this_session <= kick_threshold {
 					if !Self::invulnerables().contains(&acc_id) {
-						safe_account_ids.push(acc_id);
+						Self::try_remove_candidate(&acc_id)
+							.and_then(|_| {
+								removed_account_ids.push(acc_id.clone());
+								Ok(())
+							})
+							.unwrap_or_else(|why| -> () {
+								log::warn!("Failed to remove candidate {:?}", why);
+								debug_assert!(false, "failed to remove candidate {:?}", why);
+							});
 					}
-				} else {
-					Self::try_remove_candidate(&acc_id).unwrap_or_else(|why| -> usize {
-						log::warn!("Failed to remove candidate {:?}", why);
-						debug_assert!(false, "failed to remove candidate {:?}", why);
-						if !Self::invulnerables().contains(&acc_id) {
-							safe_account_ids.push(acc_id); // readd to candidates
-						}
-						safe_account_ids.len() // RAD: Compute this correctly or just ignore?
-					});
 				}
 			});
-			// RAD: TODO: check that candidates in storage and this array are same size
-			safe_account_ids
+			removed_account_ids
 		}
 	}
 
@@ -619,13 +614,24 @@ pub mod pallet {
 
 			let candidates = Self::candidates();
 			let candidates_len_before = candidates.len();
-			let active_candidates = Self::kick_stale_candidates(candidates);
-			let active_candidates_len = active_candidates.len();
+			let removed_collators = Self::kick_stale_candidates();
+			let active_candidates = candidates // XXX: This could mutate candidates in place
+				.iter()
+				.filter_map(|x| {
+					if removed_collators.contains(&x.who) {
+						None
+					} else {
+						Some(x.who.clone())
+					}
+				})
+				.collect();
 			let result = Self::assemble_collators(active_candidates);
-			let removed = candidates_len_before - active_candidates_len;
 
 			frame_system::Pallet::<T>::register_extra_weight_unchecked(
-				T::WeightInfo::new_session(candidates_len_before as u32, removed as u32),
+				T::WeightInfo::new_session(
+					candidates_len_before as u32,
+					removed_collators.len() as u32,
+				),
 				DispatchClass::Mandatory,
 			);
 			Some(result)

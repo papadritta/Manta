@@ -15,7 +15,7 @@
 // along with Manta.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate as collator_selection;
-use crate::{mock::*, CandidateInfo, Error};
+use crate::{mock::*, BlocksPerCollatorThisSession, CandidateInfo, Error};
 use frame_support::{
 	assert_noop, assert_ok,
 	traits::{Currency, GenesisBuild, OnInitialize},
@@ -318,46 +318,37 @@ fn session_management_works() {
 	});
 }
 #[test]
-fn kick_mechanism() {
+fn kick_algorithm() {
 	new_test_ext().execute_with(|| {
-		// add a new collator
+		// add collator candidates
+		assert_ok!(CollatorSelection::set_desired_candidates(
+			Origin::signed(RootAccount::get()),
+			5
+		));
 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
-		// CollatorSelection::BlocksPerCollatorThisSession::get(1);
-		// crate::BlocksPerCollatorThisSession<Test>::get(1);
-		// CollatorSelection::pallet::BlocksPerCollatorThisSession::get(1);
-		// let b = <pallet::Pallet<mock::Test> as Config>::BlocksPerCollatorThisSessio::get(
-		// 	Origin::signed(1),
-		// );
-		let a = collator_selection::BlocksPerCollatorThisSession::<Test>::get(Origin::signed(1));
-		let aid = RootAccount::get();
-		let b = Balances::free_balance(aid);
-		// assert_eq!(
-		// 	CollatorSelection::BlocksPerCollatorThisSession::<Test>::get(Origin::signed(1)),
-		// 	0
-		// );
-		// assert_eq!(
-		// 	CollatorSelection::BlocksPerCollatorThisSession::get(Origin::signed(2)),
-		// 	0
-		// );
-		// assert_eq!(
-		// 	CollatorSelection::BlocksPerCollatorThisSession::get(Origin::signed(3)),
-		// 	0
-		// );
-		// assert_eq!(
-		// 	CollatorSelection::BlocksPerCollatorThisSession::get(Origin::signed(4)),
-		// 	0
-		// );
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
 
-		// RAD: How to mutate storage items from here?
-		// <pallet::Pallet<mock::Test>>::BlocksPerCollatorThisSession::insert(Origin::signed(1), 10);
-		// BCollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(2), 10);
-		// CollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(3), 0);
-		// CollatorSelection::BlocksPerCollatorThisSession::insert(Origin::signed(4), 10);
-		// assert_eq!(
-		// 	CollatorSelection::kick_stale_candidates(),
-		// 	vec![Origin::signed(1), Origin::signed(2), Origin::signed(4)]
-		// );
+		// 80th percentile = 10, kick 9 and below, remove 3,4,5
+		BlocksPerCollatorThisSession::<Test>::insert(1u64, 10);
+		BlocksPerCollatorThisSession::<Test>::insert(2u64, 10);
+		BlocksPerCollatorThisSession::<Test>::insert(3u64, 4);
+		BlocksPerCollatorThisSession::<Test>::insert(4u64, 9);
+		BlocksPerCollatorThisSession::<Test>::insert(5u64, 0);
+		assert_eq!(CollatorSelection::kick_stale_candidates(), vec![5, 3, 4]);
+
+		// readd them
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
+
+		// Don't try kicking invulnerables ( 1 and 2 ), percentile = 9, kick 8 and below
+		BlocksPerCollatorThisSession::<Test>::insert(1u64, 0);
+		BlocksPerCollatorThisSession::<Test>::insert(2u64, 10);
+		BlocksPerCollatorThisSession::<Test>::insert(3u64, 4);
+		BlocksPerCollatorThisSession::<Test>::insert(4u64, 9);
+		BlocksPerCollatorThisSession::<Test>::insert(5u64, 0);
+		assert_eq!(CollatorSelection::kick_stale_candidates(), vec![5, 3]);
 	});
 }
 #[test]
