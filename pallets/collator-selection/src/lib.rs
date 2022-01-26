@@ -88,7 +88,7 @@ pub mod pallet {
 		},
 		traits::{
 			Currency, EnsureOrigin, ExistenceRequirement::KeepAlive, ReservableCurrency,
-			ValidatorRegistration,
+			ValidatorRegistration, ValidatorSet,
 		},
 		weights::DispatchClass,
 		PalletId,
@@ -151,7 +151,8 @@ pub mod pallet {
 		type ValidatorIdOf: Convert<Self::AccountId, Option<Self::ValidatorId>>;
 
 		/// Validate a user is registered
-		type ValidatorRegistration: ValidatorRegistration<Self::ValidatorId>;
+		type ValidatorRegistration: ValidatorRegistration<Self::ValidatorId>
+			+ ValidatorSet<Self::ValidatorId>;
 
 		/// The weight information of this pallet.
 		type WeightInfo: WeightInfo;
@@ -386,7 +387,7 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&who, deposit)?;
 						candidates.push(incoming);
-						// <BlocksPerCollatorThisSession<T>>::insert(who.clone(), 0u32); // TODO: This must happen when the candidate is registered as collator, not here
+						// <BlocksPerCollatorThisSession<T>>::insert(who.clone(), 0u32); // TODO: This must happen when the candidate becomes active as a collator, not here
 						Ok(candidates.len())
 					}
 				})?;
@@ -564,6 +565,17 @@ pub mod pallet {
 			});
 			removed_account_ids
 		}
+		pub fn reset_collator_performance() {
+			// FIXME: 0 the map and add new collators or drop and recreate from scratch?
+			<BlocksPerCollatorThisSession<T>>::remove_all(None);
+			let validators = T::ValidatorRegistration::validators();
+			// for v in validators {
+			// 	if !<BlocksPerCollatorThisSession<T>>::contains_key(v) {
+			// 		<BlocksPerCollatorThisSession<T>>::insert((v as T::AccountId).clone(), 0u32);
+			// 	}
+			// }
+			// RAD: Does this need a call to register_extra_weight too?
+		}
 	}
 
 	/// Keep track of number of authored blocks per authority, uncles are counted as well since
@@ -635,15 +647,7 @@ pub mod pallet {
 		}
 		fn start_session(_: SessionIndex) {
 			// Reset collator block counts to 0
-			// FIXME: 0 the map and add new collators or drop and recreate from scratch?
-			<BlocksPerCollatorThisSession<T>>::remove_all(None);
-			let validators = Session::validators();
-			// for v in validators() {
-			// 	if !<BlocksPerCollatorThisSession<T>>::contains_key(v) {
-			// 		<BlocksPerCollatorThisSession<T>>::insert((v as T::AccountId).clone(), 0u32);
-			// 	}
-			// }
-			// RAD: Does this need a call to register_extra_weight too?
+			Self::reset_collator_performance();
 		}
 		fn end_session(_: SessionIndex) {
 			// we don't care.

@@ -38,6 +38,7 @@ pallet-timestamp  = { git = 'https://github.com/paritytech/substrate.git', branc
 sp-consensus-aura = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.13" }
 pallet-balances   = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.13" }
 pallet-aura       = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.13" }
+sp-staking        = { git = 'https://github.com/paritytech/substrate.git', branch = "polkadot-v0.9.13" }
 
 [features]
 default            = ['std']

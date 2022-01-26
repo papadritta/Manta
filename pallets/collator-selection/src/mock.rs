@@ -18,7 +18,7 @@ use super::*;
 use crate as collator_selection;
 use frame_support::{
 	ord_parameter_types, parameter_types,
-	traits::{FindAuthor, GenesisBuild, ValidatorRegistration},
+	traits::{FindAuthor, GenesisBuild, ValidatorRegistration, ValidatorSet},
 	PalletId,
 };
 use frame_system as system;
@@ -203,6 +203,17 @@ impl ValidatorRegistration<u64> for IsRegistered {
 		} else {
 			true
 		}
+	}
+}
+
+impl ValidatorSet<u64> for IsRegistered {
+	type ValidatorId = u64;
+	type ValidatorIdOf = IdentityCollator;
+	fn session_index() -> sp_staking::SessionIndex {
+		Session::current_index()
+	}
+	fn validators() -> Vec<Self::ValidatorId> {
+		Session::validators()
 	}
 }
 
