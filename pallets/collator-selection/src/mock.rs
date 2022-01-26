@@ -228,6 +228,7 @@ impl Config for Test {
 	type UnderperformPercentileByPercentToKick = UnderperformPercentileByPercentToKick;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = IdentityCollator;
+	type AccountIdOf = IdentityCollator;
 	type ValidatorRegistration = IsRegistered;
 	type WeightInfo = ();
 }

@@ -109,6 +109,11 @@ pub mod pallet {
 			Some(t)
 		}
 	}
+	impl<T> sp_runtime::traits::Convert<T, T> for IdentityCollator {
+		fn convert(t: T) -> T {
+			t
+		}
+	}
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -149,10 +154,11 @@ pub mod pallet {
 		///
 		/// Its cost must be at most one storage read.
 		type ValidatorIdOf: Convert<Self::AccountId, Option<Self::ValidatorId>>;
+		type AccountIdOf: Convert<Self::ValidatorId, Self::AccountId>;
 
 		/// Validate a user is registered
 		type ValidatorRegistration: ValidatorRegistration<Self::ValidatorId>
-			+ ValidatorSet<Self::ValidatorId>;
+			+ ValidatorSet<Self::AccountId>;
 
 		/// The weight information of this pallet.
 		type WeightInfo: WeightInfo;
@@ -569,11 +575,13 @@ pub mod pallet {
 			// FIXME: 0 the map and add new collators or drop and recreate from scratch?
 			<BlocksPerCollatorThisSession<T>>::remove_all(None);
 			let validators = T::ValidatorRegistration::validators();
-			// for v in validators {
-			// 	if !<BlocksPerCollatorThisSession<T>>::contains_key(v) {
-			// 		<BlocksPerCollatorThisSession<T>>::insert((v as T::AccountId).clone(), 0u32);
-			// 	}
-			// }
+			for validator_id in validators {
+				// let validator_key = T::ValidatorIdOf::convert(who.clone())
+				let account_id = T::AccountIdOf::convert(validator_id.clone());
+				if !<BlocksPerCollatorThisSession<T>>::contains_key(&account_id) {
+					<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
+				}
+			}
 			// RAD: Does this need a call to register_extra_weight too?
 		}
 	}
