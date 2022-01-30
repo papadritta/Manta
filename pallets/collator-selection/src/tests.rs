@@ -354,12 +354,15 @@ fn kick_algorithm() {
 #[test]
 fn kick_mechanism() {
 	new_test_ext().execute_with(|| {
-		initialize_to_block(4);
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|(aid, _)| {
-			println!("{aid:?}");
+		// RAD: mock.rs specifies 4 as author of all blocks in find_author, 4 will produce all 10 blocks in a session
+		initialize_to_block(2);
+		println!("0:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
 		});
+		assert_eq!(Session::validators(), vec![1, 2]);
 
-		// add new collator candidates
+		// add new collator candidates, they will become validators 2 sessions later
 		assert_ok!(CollatorSelection::set_desired_candidates(
 			Origin::signed(RootAccount::get()),
 			5
@@ -370,22 +373,46 @@ fn kick_mechanism() {
 
 		// Registering as candidates does nothing to the storage item,
 		// it gets populated on start of the session where they become active validators
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|(aid, _)| {
-			println!("{aid:?}");
+		initialize_to_block(15);
+		println!("1:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
+		});
+		assert_eq!(Session::validators(), vec![1, 2]); // collator 2 must not have been kicked, invulnerable
+
+		initialize_to_block(24); // 2 sessions later they should be active
+		BlocksPerCollatorThisSession::<Test>::insert(5u64, 10);
+		println!("2:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
+		});
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+
+		initialize_to_block(33); // 2 sessions later they should be active
+		println!("3:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
 		});
 
-		initialize_to_block(49); // 3 sessions later they should be active
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|(aid, _)| {
-			println!("{aid:?}");
+		initialize_to_block(42); // 3 sessions later they should be active
+		println!("4:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
 		});
 
 		// let's assume collator 4 produced 1 block only
 		// everyone else had 2, default percentile is 2, threshold becomes 1, we kick
 		BlocksPerCollatorThisSession::<Test>::insert(4u64, 1);
-		// RAD: How to mutate storage items from here?
-		// assert_eq!(CollatorSelection::kick_stale_candidates(), vec![3, 5]);
-		initialize_to_block(51); // 3 sessions later they should be active
-						 // session changed, 4 should be removed from candidates
+		println!("4.1:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
+		});
+
+		initialize_to_block(51); // session changed, 4 should be removed from candidates
+		println!("5:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
+		});
 		assert_eq!(
 			CollatorSelection::candidates()
 				.iter()
@@ -393,7 +420,11 @@ fn kick_mechanism() {
 				.collect::<Vec<_>>(),
 			vec![3, 5]
 		);
-		initialize_to_block(61);
+		initialize_to_block(66);
+		println!("6:");
+		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
+			println!("{tuple:?}");
+		});
 		// session changed again, 4 should no longer be an active validator
 		assert_eq!(Session::validators(), vec![1, 2, 3, 5]);
 	});

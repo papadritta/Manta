@@ -148,7 +148,9 @@ pub mod pallet {
 		type UnderperformPercentileByPercentToKick: Get<u8>;
 
 		/// A stable ID for a validator.
-		type ValidatorId: Member + Parameter;
+		type ValidatorId: Member
+			+ Parameter
+			+ From<<Self::ValidatorRegistration as ValidatorSet<Self::AccountId>>::ValidatorId>;
 
 		/// A conversion from account ID to validator ID.
 		///
@@ -190,13 +192,10 @@ pub mod pallet {
 
 	// RAD Add collator performance map storage item, compare with Acala
 	pub(super) type BlockCount = u32;
-	#[pallet::type_value]
-	pub(super) fn StartingBlockCount() -> BlockCount {
-		0u32.into()
-	}
+
 	#[pallet::storage]
 	pub(super) type BlocksPerCollatorThisSession<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>; // RAD: Note: AccountId is user-selectable
+		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount>; // RAD: Note: AccountId is user-selectable
 
 	/// Desired number of candidates.
 	///
@@ -393,7 +392,6 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&who, deposit)?;
 						candidates.push(incoming);
-						// <BlocksPerCollatorThisSession<T>>::insert(who.clone(), 0u32); // TODO: This must happen when the candidate becomes active as a collator, not here
 						Ok(candidates.len())
 					}
 				})?;
@@ -447,7 +445,6 @@ pub mod pallet {
 					} else {
 						T::Currency::reserve(&new_candidate, deposit)?;
 						candidates.push(incoming);
-						// <BlocksPerCollatorThisSession<T>>::insert(new_candidate.clone(), 0u32);
 						Ok(candidates.len())
 					}
 				})?;
@@ -503,7 +500,6 @@ pub mod pallet {
 						.ok_or(Error::<T>::NotCandidate)?;
 					T::Currency::unreserve(who, candidates[index].deposit);
 					candidates.remove(index);
-					<BlocksPerCollatorThisSession<T>>::remove(who.clone());
 					Ok(candidates.len())
 				})?;
 			Self::deposit_event(Event::CandidateRemoved(who.clone()));
@@ -554,12 +550,13 @@ pub mod pallet {
 				.map(|acc_info| acc_info.0.clone())
 				.collect::<Vec<_>>();
 			kick_candidates.into_iter().for_each(|acc_id| {
-				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find in collator_perf_this_session vec
+				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id).unwrap(); // RAD: read storage or find in collator_perf_this_session vec
 				if my_blocks_this_session <= kick_threshold {
 					if !Self::invulnerables().contains(&acc_id) {
 						Self::try_remove_candidate(&acc_id)
 							.and_then(|_| {
 								removed_account_ids.push(acc_id.clone());
+								println!("{acc_id:?} kicked");
 								Ok(())
 							})
 							.unwrap_or_else(|why| -> () {
@@ -576,8 +573,7 @@ pub mod pallet {
 			<BlocksPerCollatorThisSession<T>>::remove_all(None);
 			let validators = T::ValidatorRegistration::validators();
 			for validator_id in validators {
-				// let validator_key = T::ValidatorIdOf::convert(who.clone())
-				let account_id = T::AccountIdOf::convert(validator_id.clone());
+				let account_id = T::AccountIdOf::convert(validator_id.clone().into());
 				if !<BlocksPerCollatorThisSession<T>>::contains_key(&account_id) {
 					<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
 				}
@@ -603,8 +599,8 @@ pub mod pallet {
 			debug_assert!(_success.is_ok());
 
 			// increment blocks this node authored // RAD: Do sanity checks
-			let mut authored_blocks = <BlocksPerCollatorThisSession<T>>::get(&author);
-			// 	.ok_or(Error::<T>::NotCandidate)?;
+			let mut authored_blocks =
+				<BlocksPerCollatorThisSession<T>>::get(&author).unwrap(); // XXX: throw NotACandidate error
 			authored_blocks = authored_blocks.saturating_add(1u32);
 			<BlocksPerCollatorThisSession<T>>::insert(&author, authored_blocks);
 
@@ -623,6 +619,7 @@ pub mod pallet {
 	/// Play the role of the session manager.
 	impl<T: Config> SessionManager<T::AccountId> for Pallet<T> {
 		fn new_session(index: SessionIndex) -> Option<Vec<T::AccountId>> {
+			// Crunch collator performance of the ending session
 			log::info!(
 				"assembling new collators for new session {} at #{:?}",
 				index,
@@ -654,11 +651,12 @@ pub mod pallet {
 			Some(result)
 		}
 		fn start_session(_: SessionIndex) {
-			// Reset collator block counts to 0
+			// Build performance map for the currently active validatorset in the just started session
 			Self::reset_collator_performance();
 		}
 		fn end_session(_: SessionIndex) {
 			// we don't care.
+			// RAD: Should we do kicking on end_session instead?
 		}
 	}
 }
