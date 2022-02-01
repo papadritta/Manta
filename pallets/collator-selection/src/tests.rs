@@ -335,7 +335,10 @@ fn kick_algorithm() {
 		BlocksPerCollatorThisSession::<Test>::insert(3u64, 4);
 		BlocksPerCollatorThisSession::<Test>::insert(4u64, 9);
 		BlocksPerCollatorThisSession::<Test>::insert(5u64, 0);
-		assert_eq!(CollatorSelection::kick_stale_candidates(), vec![5, 3, 4]);
+		assert_eq!(
+			CollatorSelection::kick_stale_candidates(CollatorSelection::candidates()),
+			vec![5, 3, 4]
+		);
 
 		// readd them
 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
@@ -348,7 +351,10 @@ fn kick_algorithm() {
 		BlocksPerCollatorThisSession::<Test>::insert(3u64, 4);
 		BlocksPerCollatorThisSession::<Test>::insert(4u64, 9);
 		BlocksPerCollatorThisSession::<Test>::insert(5u64, 0);
-		assert_eq!(CollatorSelection::kick_stale_candidates(), vec![5, 3]);
+		assert_eq!(
+			CollatorSelection::kick_stale_candidates(CollatorSelection::candidates()),
+			vec![5, 3]
+		);
 	});
 }
 #[test]

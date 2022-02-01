@@ -190,7 +190,6 @@ pub mod pallet {
 	pub type Candidates<T: Config> =
 		StorageValue<_, Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>, ValueQuery>;
 
-	// RAD Add collator performance map storage item, compare with Acala
 	pub(super) type BlockCount = u32;
 	#[pallet::type_value]
 	pub(super) fn StartingBlockCount() -> BlockCount {
@@ -198,7 +197,7 @@ pub mod pallet {
 	}
 	#[pallet::storage]
 	pub(super) type BlocksPerCollatorThisSession<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>; // RAD: Note: AccountId is user-selectable
+		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>; // RAD: Note: AccountId is user-selectable, but protected by ED, is that enough?
 
 	/// Desired number of candidates.
 	///
@@ -250,10 +249,6 @@ pub mod pallet {
 				T::MaxCandidates::get() >= self.desired_candidates,
 				"genesis desired_candidates are more than T::MaxCandidates",
 			);
-			// assert!(// RAD: Is there a way to make this check?
-			// 	T::Period > BlockCount::MAX,
-			// 	"there are more blocks per session than fit into BlockCount value type, increase size",
-			// );
 			assert!(
 				T::PerformancePercentileToConsiderForKick::get() < 100,
 				"Percentile must be given as number between 0 and 100",
@@ -520,7 +515,9 @@ pub mod pallet {
 
 		/// Removes collators with unsatisfactory performance
 		/// Returns the removed AccountIds
-		pub fn kick_stale_candidates() -> Vec<T::AccountId> {
+		pub fn kick_stale_candidates(
+			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
+		) -> Vec<T::AccountId> {
 			// 0. TODO: All sanity checks
 			let mut collator_perf_this_session =
 				<BlocksPerCollatorThisSession<T>>::iter().collect::<Vec<_>>();
@@ -535,7 +532,7 @@ pub mod pallet {
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
 			let ordinal_rank = (((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
 				* no_of_candidates as f64) as usize)
-				.saturating_sub(1); // Note: -1 to accomodate 0-index counting
+				.saturating_sub(1); // Note: -1 to accomodate 0-index counting // RAD: Is there API to saturate but notify on non-overflow so we can log a warning?
 					// 3. Block number at rank is the percentile and our kick performance benchmark
 			let blocks_created_at_percentile: BlockCount =
 				collator_perf_this_session[ordinal_rank].1; // XXX: don't like the tuple accessor, could this be a struct?
@@ -547,20 +544,20 @@ pub mod pallet {
 			log::info!("Session Performance stats: {}-th percentile: {blocks_created_at_percentile} blocks\nWill kick under {kick_threshold} blocks",T::PerformancePercentileToConsiderForKick::get());
 
 			// 5. Walk the percentile slice, call try_remove_candidate if a collator is under threshold
+			let current_candidate_ids = candidates
+				.into_iter()
+				.map(|i: CandidateInfo<T::AccountId, BalanceOf<T>>| i.who.clone())
+				.collect::<Vec<_>>();
 			let mut removed_account_ids: Vec<T::AccountId> = Vec::new();
 			let kick_candidates = collator_perf_this_session[..ordinal_rank] // ordinal-rank exclusive, the collator with percentile perf is safe
 				.iter()
 				.map(|acc_info| acc_info.0.clone())
 				.collect::<Vec<_>>();
 			kick_candidates.into_iter().for_each(|acc_id| {
-				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find in collator_perf_this_session vec
-				if my_blocks_this_session <= kick_threshold {
-					if Self::candidates() // if not in candidates, it is a) an invulnerable b) kicked last session and waiting for ejection
-						.into_iter()
-						.map(|i: CandidateInfo<T::AccountId, BalanceOf<T>>| i.who.clone()) // XXX: multiple computations of map
-						.collect::<Vec<_>>()
-						.contains(&acc_id)
-					{
+				// If we're not a candidate we're invulnerable or already kicked
+				if current_candidate_ids.contains(&acc_id) {
+					let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find by iterating collator_perf_this_session vec, which is faster
+					if my_blocks_this_session <= kick_threshold {
 						Self::try_remove_candidate(&acc_id)
 							.and_then(|_| {
 								removed_account_ids.push(acc_id.clone());
@@ -576,7 +573,7 @@ pub mod pallet {
 			removed_account_ids
 		}
 		pub fn reset_collator_performance() {
-			// FIXME: 0 the map and add new collators or drop and recreate from scratch?
+			// XXX: 0 the map and add new collators or drop and recreate from scratch?
 			<BlocksPerCollatorThisSession<T>>::remove_all(None);
 			let validators = T::ValidatorRegistration::validators();
 			for validator_id in validators {
@@ -585,7 +582,7 @@ pub mod pallet {
 					<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
 				}
 			}
-			// RAD: Does this need a call to register_extra_weight too?
+			// RAD: Does this need a call to register_extra_weight too as it's mutating storage? ( gets called only on rotate_session, so might not be needed )
 		}
 	}
 
@@ -605,8 +602,8 @@ pub mod pallet {
 			let _success = T::Currency::transfer(&pot, &author, reward, KeepAlive);
 			debug_assert!(_success.is_ok());
 
-			// increment blocks this node authored // RAD: Do sanity checks
-			let mut authored_blocks = <BlocksPerCollatorThisSession<T>>::get(&author); // XXX: throw NotACandidate error
+			// increment blocks this node authored
+			let mut authored_blocks = <BlocksPerCollatorThisSession<T>>::get(&author); // RAD: having this be an Option Query and throwing NotACandidate error would mess up testing code, hjow to resolve this?
 			authored_blocks = authored_blocks.saturating_add(1u32);
 			<BlocksPerCollatorThisSession<T>>::insert(&author, authored_blocks);
 
@@ -617,7 +614,6 @@ pub mod pallet {
 		}
 
 		fn note_uncle(_author: T::AccountId, _age: T::BlockNumber) {
-			// RAD: Can't really have uncles in a PoA round-robin (Aura) system
 			//TODO can we ignore this?
 		}
 	}
@@ -634,23 +630,23 @@ pub mod pallet {
 
 			let candidates = Self::candidates();
 			let candidates_len_before = candidates.len();
-			let removed_collators = Self::kick_stale_candidates();
-			let active_candidates = candidates // XXX: This could mutate candidates in place
+			let removed_candidate_ids = Self::kick_stale_candidates(candidates.clone());
+			let active_candidate_ids = candidates
 				.iter()
 				.filter_map(|x| {
-					if removed_collators.contains(&x.who) {
+					if removed_candidate_ids.contains(&x.who) {
 						None
 					} else {
 						Some(x.who.clone())
 					}
 				})
 				.collect();
-			let result = Self::assemble_collators(active_candidates);
+			let result = Self::assemble_collators(active_candidate_ids);
 
 			frame_system::Pallet::<T>::register_extra_weight_unchecked(
 				T::WeightInfo::new_session(
 					candidates_len_before as u32,
-					removed_collators.len() as u32,
+					removed_candidate_ids.len() as u32,
 				),
 				DispatchClass::Mandatory,
 			);
