@@ -568,7 +568,6 @@ impl pallet_collator_selection::Config for Runtime {
 	type KickThreshold = Period;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
-	type AccountIdOf = manta_collator_selection::IdentityCollator;
 	type ValidatorRegistration = Session;
 	type WeightInfo = pallet_collator_selection::weights::SubstrateWeight<Runtime>;
 }
