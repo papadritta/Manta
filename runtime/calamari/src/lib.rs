@@ -814,6 +814,7 @@ impl manta_collator_selection::Config for Runtime {
 	type UnderperformPercentileByPercentToKick = UnderperformPercentileByPercentToKick;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = manta_collator_selection::IdentityCollator;
+	type AccountIdOf = manta_collator_selection::IdentityCollator;
 	type ValidatorRegistration = Session;
 	type WeightInfo = weights::manta_collator_selection::SubstrateWeight<Runtime>;
 }
