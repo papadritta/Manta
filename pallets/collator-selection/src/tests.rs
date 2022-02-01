@@ -353,16 +353,26 @@ fn kick_algorithm() {
 }
 #[test]
 fn kick_mechanism() {
-	new_test_ext().execute_with(|| {
-		// RAD: mock.rs specifies 4 as author of all blocks in find_author, 4 will produce all 10 blocks in a session
-		initialize_to_block(2);
-		println!("0:");
+	let candidate_ids = || {
+		CollatorSelection::candidates()
+			.iter()
+			.map(|c| c.who.clone())
+			.collect::<Vec<_>>()
+	};
+	let print_collator_perf = || {
 		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
 			println!("{tuple:?}");
 		});
-		assert_eq!(Session::validators(), vec![1, 2]);
+	};
+	let set_all_validator_perf_to = |n: u32| {
+		for v in Session::validators() {
+			BlocksPerCollatorThisSession::<Test>::insert(v, n);
+		}
+	};
 
-		// add new collator candidates, they will become validators 2 sessions later
+	new_test_ext().execute_with(|| {
+		// add new collator candidates, they will become validators next session
+		// Sessions rotate every 10 blocks, so we kick on each x9-th block
 		assert_ok!(CollatorSelection::set_desired_candidates(
 			Origin::signed(RootAccount::get()),
 			5
@@ -370,63 +380,109 @@ fn kick_mechanism() {
 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(3)));
 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(4)));
 		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
+		assert_eq!(Session::validators(), vec![1, 2]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
 
-		// Registering as candidates does nothing to the storage item,
-		// it gets populated on start of the session where they become active validators
-		initialize_to_block(15);
-		println!("1:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
+		// RAD: mock.rs specifies 4 as author of all blocks in find_author, 4 will produce all 10 blocks in a session
+		// RAD: other tests like authorship_event_handler depend on 4 producing blocks
+		initialize_to_block(10);
+		// println!("1:");
+		// print_collator_perf();
 		assert_eq!(Session::validators(), vec![1, 2]); // collator 2 must not have been kicked, invulnerable
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
 
-		initialize_to_block(24); // 2 sessions later they should be active
-		BlocksPerCollatorThisSession::<Test>::insert(5u64, 10);
-		println!("2:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
+		// TC1: Only invulnerables 1,2 underperform. Nobody gets kicked
+		initialize_to_block(20);
+		// NOTE: Validator 4 produces 10 blocks each session in testing
+		set_all_validator_perf_to(10);
+		BlocksPerCollatorThisSession::<Test>::insert(1u64, 10);
+		BlocksPerCollatorThisSession::<Test>::insert(2u64, 10);
+		// println!("2:");
+		// print_collator_perf();
 		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
 
-		initialize_to_block(33); // 2 sessions later they should be active
-		println!("3:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
+		// TC2: 5 underperforms for one session, is kicked - recovers next session, but is still removed
+		initialize_to_block(30);
+		set_all_validator_perf_to(10);
+		BlocksPerCollatorThisSession::<Test>::insert(5u64, 5);
+		// println!("3:");
+		// print_collator_perf();
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
+		initialize_to_block(40);
+		set_all_validator_perf_to(10);
+		// println!("4:");
+		// print_collator_perf();
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4]);
+		initialize_to_block(50);
+		set_all_validator_perf_to(10);
+		// println!("5:");
+		// print_collator_perf();
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4]);
+		assert_eq!(candidate_ids(), vec![3, 4]);
 
-		initialize_to_block(42); // 3 sessions later they should be active
-		println!("4:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
+		// TC3: 5 underperforms for one session, is kicked and immediately readded - loses one session then onboards again
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
+		initialize_to_block(60);
+		set_all_validator_perf_to(10);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
+		initialize_to_block(70);
+		set_all_validator_perf_to(10);
+		BlocksPerCollatorThisSession::<Test>::insert(5u64, 5);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
+		initialize_to_block(80);
+		set_all_validator_perf_to(10);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4]);
+		initialize_to_block(83);
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
+		initialize_to_block(90);
+		set_all_validator_perf_to(10);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
+		initialize_to_block(100);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
 
-		// let's assume collator 4 produced 1 block only
-		// everyone else had 2, default percentile is 2, threshold becomes 1, we kick
-		BlocksPerCollatorThisSession::<Test>::insert(4u64, 1);
-		println!("4.1:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
+		// TC4: Everybody underperforms (algorithm knows no target number, just relative performance), nobody gets kicked
+		set_all_validator_perf_to(6);
+		initialize_to_block(110);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
 
-		initialize_to_block(51); // session changed, 4 should be removed from candidates
-		println!("5:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
-		assert_eq!(
-			CollatorSelection::candidates()
-				.iter()
-				.map(|x| { x.who.clone() })
-				.collect::<Vec<_>>(),
-			vec![3, 5]
-		);
-		initialize_to_block(66);
-		println!("6:");
-		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
-		});
-		// session changed again, 4 should no longer be an active validator
-		assert_eq!(Session::validators(), vec![1, 2, 3, 5]);
+		// TC5: 5 is on threshold ( at 5 nodes, the 90th percentile is the second highest value of the set = 100, 10% threshold is 10 ), 3 is just above
+		set_all_validator_perf_to(100);
+		BlocksPerCollatorThisSession::<Test>::insert(3u64, 91);
+		BlocksPerCollatorThisSession::<Test>::insert(5u64, 90);
+		initialize_to_block(120);
+		set_all_validator_perf_to(100);
+		assert_eq!(candidate_ids(), vec![3, 4]);
+
+		//  TC6: Collator is added as candidate and removed next session before becoming active
+		initialize_to_block(130);
+		set_all_validator_perf_to(100);
+		assert_ok!(CollatorSelection::register_as_candidate(Origin::signed(5)));
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4]);
+		assert_eq!(candidate_ids(), vec![3, 4, 5]);
+		initialize_to_block(140);
+		// Next session is already planned and session keys are queued here
+		assert_ok!(CollatorSelection::remove_collator(
+			Origin::signed(RootAccount::get()),
+			5
+		));
+		set_all_validator_perf_to(100);
+		assert_eq!(candidate_ids(), vec![3, 4]);
+		initialize_to_block(150);
+		set_all_validator_perf_to(100);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4, 5]); // 5 was queued already so it becomes a validator
+		initialize_to_block(160);
+		set_all_validator_perf_to(100);
+		assert_eq!(Session::validators(), vec![1, 2, 3, 4]); // and is removed next session
 	});
 }
 #[test]

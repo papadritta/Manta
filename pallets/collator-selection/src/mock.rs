@@ -104,7 +104,7 @@ impl FindAuthor<u64> for Author4 {
 	where
 		I: 'a + IntoIterator<Item = (frame_support::ConsensusEngineId, &'a [u8])>,
 	{
-		Some(1)
+		Some(4)
 	}
 }
 

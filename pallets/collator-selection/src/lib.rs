@@ -192,10 +192,13 @@ pub mod pallet {
 
 	// RAD Add collator performance map storage item, compare with Acala
 	pub(super) type BlockCount = u32;
-
+	#[pallet::type_value]
+	pub(super) fn StartingBlockCount() -> BlockCount {
+		0u32.into()
+	}
 	#[pallet::storage]
 	pub(super) type BlocksPerCollatorThisSession<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount>; // RAD: Note: AccountId is user-selectable
+		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>; // RAD: Note: AccountId is user-selectable
 
 	/// Desired number of candidates.
 	///
@@ -550,13 +553,17 @@ pub mod pallet {
 				.map(|acc_info| acc_info.0.clone())
 				.collect::<Vec<_>>();
 			kick_candidates.into_iter().for_each(|acc_id| {
-				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id).unwrap(); // RAD: read storage or find in collator_perf_this_session vec
+				let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find in collator_perf_this_session vec
 				if my_blocks_this_session <= kick_threshold {
-					if !Self::invulnerables().contains(&acc_id) {
+					if Self::candidates() // if not in candidates, it is a) an invulnerable b) kicked last session and waiting for ejection
+						.into_iter()
+						.map(|i: CandidateInfo<T::AccountId, BalanceOf<T>>| i.who.clone()) // XXX: multiple computations of map
+						.collect::<Vec<_>>()
+						.contains(&acc_id)
+					{
 						Self::try_remove_candidate(&acc_id)
 							.and_then(|_| {
 								removed_account_ids.push(acc_id.clone());
-								println!("{acc_id:?} kicked");
 								Ok(())
 							})
 							.unwrap_or_else(|why| -> () {
@@ -599,8 +606,7 @@ pub mod pallet {
 			debug_assert!(_success.is_ok());
 
 			// increment blocks this node authored // RAD: Do sanity checks
-			let mut authored_blocks =
-				<BlocksPerCollatorThisSession<T>>::get(&author).unwrap(); // XXX: throw NotACandidate error
+			let mut authored_blocks = <BlocksPerCollatorThisSession<T>>::get(&author); // XXX: throw NotACandidate error
 			authored_blocks = authored_blocks.saturating_add(1u32);
 			<BlocksPerCollatorThisSession<T>>::insert(&author, authored_blocks);
 
@@ -648,11 +654,12 @@ pub mod pallet {
 				),
 				DispatchClass::Mandatory,
 			);
+			// Build performance map for the currently active validatorset in the just started session
+			Self::reset_collator_performance();
 			Some(result)
 		}
 		fn start_session(_: SessionIndex) {
-			// Build performance map for the currently active validatorset in the just started session
-			Self::reset_collator_performance();
+			// we don't care.
 		}
 		fn end_session(_: SessionIndex) {
 			// we don't care.
