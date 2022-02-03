@@ -263,8 +263,8 @@ benchmarks! {
 
 	// worst case for new session.
 	new_session {
-		let r in 1 .. T::MaxCandidates::get();
 		let c in 1 .. T::MaxCandidates::get();
+		let p = T::PerformancePercentileToConsiderForKick::get();
 
 		<CandidacyBond<T>>::put(T::Currency::minimum_balance());
 		<DesiredCandidates<T>>::put(c);
@@ -277,19 +277,23 @@ benchmarks! {
 		let zero_block: T::BlockNumber = 0u32.into();
 		let candidates = <Candidates<T>>::get();
 
-		let non_removals = c.saturating_sub(r);
+		// nodes on or above percentile
+		let non_removals = (( p / 100.0
+				* c as f64) as usize) ;
+				// non_removals = ordinal rank in lib.rs
+		let r = c.saturating_sub(non_removals);
 
 		for i in 0..c {
-			<LastAuthoredBlock<T>>::insert(candidates[i as usize].who.clone(), zero_block);
+			<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), zero_block);
 		}
 
 		if non_removals > 0 {
 			for i in 0..non_removals {
-				<LastAuthoredBlock<T>>::insert(candidates[i as usize].who.clone(), new_block);
+				<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), new_block);
 			}
 		} else {
 			for i in 0..c {
-				<LastAuthoredBlock<T>>::insert(candidates[i as usize].who.clone(), new_block);
+				<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), new_block);
 			}
 		}
 
