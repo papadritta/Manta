@@ -299,7 +299,7 @@ benchmarks! {
 
 		let pre_length = <Candidates<T>>::get().len();
 
-		frame_system::Pallet::<T>::set_block_number(new_block);
+		frame_system::Pallet::<T>::set_block_number(new_block.into());
 
 		assert!(<Candidates<T>>::get().len() == c as usize);
 	}: {
