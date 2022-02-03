@@ -541,7 +541,12 @@ pub mod pallet {
 				1.0 - T::UnderperformPercentileByPercentToKick::get() as f64 / 100.0;
 			let kick_threshold =
 				(threshold_factor * (blocks_created_at_percentile as f64)) as BlockCount;
-			log::info!("Session Performance stats: {}-th percentile: {blocks_created_at_percentile} blocks\nWill kick under {kick_threshold} blocks",T::PerformancePercentileToConsiderForKick::get());
+			log::info!(
+				"Session Performance stats: {}-th percentile: {} blocks\nWill kick under {} blocks",
+				T::PerformancePercentileToConsiderForKick::get(),
+				blocks_created_at_percentile,
+				kick_threshold
+			);
 
 			// 5. Walk the percentile slice, call try_remove_candidate if a collator is under threshold
 			let current_candidate_ids = candidates
