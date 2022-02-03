@@ -367,7 +367,7 @@ fn kick_mechanism() {
 	};
 	let print_collator_perf = || {
 		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
-			println!("{tuple:?}");
+			println!("{:?}", tuple);
 		});
 	};
 	let set_all_validator_perf_to = |n: u32| {
