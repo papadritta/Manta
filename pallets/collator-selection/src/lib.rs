@@ -578,17 +578,17 @@ pub mod pallet {
 			});
 			removed_account_ids
 		}
+
+		/// Reset the performance map to the currently active validators at 0 blocks
 		pub fn reset_collator_performance() {
-			// XXX: 0 the map and add new collators or drop and recreate from scratch?
+			// XXX: intersect BPC map with validators and try_mutate to 0 oder or drop and recreate from scratch?
 			<BlocksPerCollatorThisSession<T>>::remove_all(None);
 			let validators = T::ValidatorRegistration::validators();
 			for validator_id in validators {
 				let account_id = T::AccountIdOf::convert(validator_id.clone().into());
-				if !<BlocksPerCollatorThisSession<T>>::contains_key(&account_id) {
-					<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
-				}
+				<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
 			}
-			// RAD: Does this need a call to register_extra_weight too as it's mutating storage? ( gets called only on rotate_session, so might not be needed )
+			// RAD: These storage mutations count into the weight of new_session()
 		}
 	}
 
