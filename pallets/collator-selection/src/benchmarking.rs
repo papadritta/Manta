@@ -273,8 +273,8 @@ benchmarks! {
 		register_validators::<T>(c);
 		register_candidates::<T>(c);
 
-		let new_block: = 1800u32;
-		let zero_block: = 0u32;
+		let new_block = 1800u32;
+		let zero_block = 0u32;
 		let candidates = <Candidates<T>>::get();
 
 		// nodes on or above percentile
@@ -284,17 +284,16 @@ benchmarks! {
 		let r = c.saturating_sub(non_removals);
 
 		for i in 0..c {
-			<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), zero_block);
-					<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
+			<BlocksPerCollatorThisSession<T>>::insert(candidates[i as usize].who.clone(), zero_block);
 		}
 
 		if non_removals > 0 {
 			for i in 0..non_removals {
-				<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), new_block);
+				<BlocksPerCollatorThisSession<T>>::insert(candidates[i as usize].who.clone(), new_block);
 			}
 		} else {
 			for i in 0..c {
-				<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), new_block);
+				<BlocksPerCollatorThisSession<T>>::insert(candidates[i as usize].who.clone(), new_block);
 			}
 		}
 
