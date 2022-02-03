@@ -273,18 +273,19 @@ benchmarks! {
 		register_validators::<T>(c);
 		register_candidates::<T>(c);
 
-		let new_block: T::BlockNumber = 1800u32.into();
-		let zero_block: T::BlockNumber = 0u32.into();
+		let new_block: = 1800u32;
+		let zero_block: = 0u32;
 		let candidates = <Candidates<T>>::get();
 
 		// nodes on or above percentile
-		let non_removals = (( p / 100.0
-				* c as f64) as usize) ;
+		let non_removals = ( (p as f64) / 100.0
+				* c as f64) as u32 ;
 				// non_removals = ordinal rank in lib.rs
 		let r = c.saturating_sub(non_removals);
 
 		for i in 0..c {
 			<BlocksPerCollatorThisSession<T>::insert(candidates[i as usize].who.clone(), zero_block);
+					<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
 		}
 
 		if non_removals > 0 {

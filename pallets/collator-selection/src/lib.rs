@@ -530,6 +530,7 @@ pub mod pallet {
 			let no_of_candidates = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
+			// RAD: Doublecheck that f64 as usize actually rounds up
 			let ordinal_rank = (((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
 				* no_of_candidates as f64) as usize)
 				.saturating_sub(1); // Note: -1 to accomodate 0-index counting // RAD: Is there API to saturate but notify on non-overflow so we can log a warning?
