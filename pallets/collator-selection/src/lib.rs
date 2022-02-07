@@ -518,8 +518,7 @@ pub mod pallet {
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
 		) -> Vec<T::AccountId> {
-			use num_traits::float::FloatCore; // For no_std compatible f64::ceil()
-
+			// 0. Sanity checks, no performance recorded or candidates, no kicking
 			let mut collator_perf_this_session =
 				<BlocksPerCollatorThisSession<T>>::iter().collect::<Vec<_>>();
 			if collator_perf_this_session.is_empty() {
@@ -531,9 +530,10 @@ pub mod pallet {
 			let no_of_candidates = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
-			let ordinal_rank = (((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
-				* no_of_candidates as f64)
-				.ceil() as usize)
+			let ordinal_rank = (num_traits::float::FloatCore::ceil(
+				(T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
+					* no_of_candidates as f64,
+			) as usize)
 				.saturating_sub(1); // Note: -1 to accomodate 0-index counting // RAD: Is there API to saturate but notify on non-overflow so we can log a warning?
 
 			// 3. Block number at rank is the percentile and our kick performance benchmark
