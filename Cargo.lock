@@ -4380,6 +4380,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "num-traits",
  "pallet-aura",
  "pallet-authorship",
  "pallet-balances",

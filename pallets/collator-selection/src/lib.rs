@@ -518,7 +518,8 @@ pub mod pallet {
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
 		) -> Vec<T::AccountId> {
-			// 0. TODO: All sanity checks
+			use num_traits::float::FloatCore; // For no_std compatible f64::ceil()
+
 			let mut collator_perf_this_session =
 				<BlocksPerCollatorThisSession<T>>::iter().collect::<Vec<_>>();
 			if collator_perf_this_session.is_empty() {
@@ -530,20 +531,22 @@ pub mod pallet {
 			let no_of_candidates = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
-			// RAD: Doublecheck that f64 as usize actually rounds up
 			let ordinal_rank = (((T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
-				* no_of_candidates as f64) as usize)
+				* no_of_candidates as f64)
+				.ceil() as usize)
 				.saturating_sub(1); // Note: -1 to accomodate 0-index counting // RAD: Is there API to saturate but notify on non-overflow so we can log a warning?
-					// 3. Block number at rank is the percentile and our kick performance benchmark
+
+			// 3. Block number at rank is the percentile and our kick performance benchmark
 			let blocks_created_at_percentile: BlockCount =
 				collator_perf_this_session[ordinal_rank].1; // XXX: don't like the tuple accessor, could this be a struct?
-											// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
+
+			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
 			let threshold_factor =
 				1.0 - T::UnderperformPercentileByPercentToKick::get() as f64 / 100.0;
 			let kick_threshold =
 				(threshold_factor * (blocks_created_at_percentile as f64)) as BlockCount;
 			log::info!(
-				"Session Performance stats: {}-th percentile: {} blocks\nWill kick under {} blocks",
+				"Session Performance stats: {}-th percentile: {} blocks. Evicting collators who produced less than {} blocks",
 				T::PerformancePercentileToConsiderForKick::get(),
 				blocks_created_at_percentile,
 				kick_threshold
