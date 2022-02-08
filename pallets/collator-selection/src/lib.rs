@@ -527,12 +527,12 @@ pub mod pallet {
 			// 1. Sort collator performance list
 			collator_perf_this_session.sort_unstable_by_key(|k| k.1); // XXX: don't like the tuple accessor, could this be a struct?
 														  // collator_perf_this_session.reverse();
-			let no_of_candidates = collator_perf_this_session.len();
+			let no_of_validators = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
 			let ordinal_rank = (num_traits::float::FloatCore::ceil(
 				(T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
-					* no_of_candidates as f64,
+					* no_of_validators as f64,
 			) as usize)
 				.saturating_sub(1); // Note: -1 to accomodate 0-index counting // RAD: Is there API to saturate but notify on non-overflow so we can log a warning?
 
