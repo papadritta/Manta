@@ -250,7 +250,7 @@ pub mod pallet {
 				"genesis desired_candidates are more than T::MaxCandidates",
 			);
 			assert!(
-				T::PerformancePercentileToConsiderForKick::get() < 100,
+				T::PerformancePercentileToConsiderForKick::get() <= 100,
 				"Percentile must be given as number between 0 and 100",
 			);
 			assert!(
@@ -518,47 +518,56 @@ pub mod pallet {
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
 		) -> Vec<T::AccountId> {
-			// 0. Sanity checks, no performance recorded or candidates, no kicking
+			// 0. Storage reads and precondition checks
+			if candidates.is_empty() {
+				return Vec::new(); // No candidates means we're running invulnerables only
+			}
+			let percentile_for_kick = T::PerformancePercentileToConsiderForKick::get();
+			if percentile_for_kick == 0 {
+				return Vec::new(); // Selecting 0-th percentile disables kicking. Upper bound check in fn build()
+			}
+			let underperformance_threshold_percent =
+				T::UnderperformPercentileByPercentToKick::get();
+			if underperformance_threshold_percent == 100 {
+				return Vec::new(); // tolerating 100% underperformance disables kicking
+			}
 			let mut collator_perf_this_session =
 				<BlocksPerCollatorThisSession<T>>::iter().collect::<Vec<_>>();
 			if collator_perf_this_session.is_empty() {
-				return Vec::new();
+				return Vec::new(); // no validator performance recorded ( should not happen )
 			}
-			// 1. Sort collator performance list
-			collator_perf_this_session.sort_unstable_by_key(|k| k.1); // XXX: don't like the tuple accessor, could this be a struct?
-														  // collator_perf_this_session.reverse();
-			let no_of_validators = collator_perf_this_session.len();
 
-			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated)
-			let ordinal_rank = (num_traits::float::FloatCore::ceil(
-				(T::PerformancePercentileToConsiderForKick::get() as f64) / 100.0
-					* no_of_validators as f64,
-			) as usize)
-				.saturating_sub(1); // Note: -1 to accomodate 0-index counting // RAD: Is there API to saturate but notify on non-overflow so we can log a warning?
+			// 1. Sort collator performance list
+			collator_perf_this_session.sort_unstable_by_key(|k| k.1);
+			let no_of_validators = collator_perf_this_session.len() as u8;
+
+			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated and unstable)
+			let index_at_ordinal_rank = (libm::ceil((percentile_for_kick as f64) / 100f64 * no_of_validators as f64 ) // can not overflow f64 as percentile_for_kick / 100 is guaranteed to yield a [0,1] value
+					as usize)
+				.saturating_sub(1); // -1 to accomodate 0-index counting, should not saturate due to precondition check
 
 			// 3. Block number at rank is the percentile and our kick performance benchmark
 			let blocks_created_at_percentile: BlockCount =
-				collator_perf_this_session[ordinal_rank].1; // XXX: don't like the tuple accessor, could this be a struct?
+				collator_perf_this_session[index_at_ordinal_rank].1;
 
 			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
-			let threshold_factor =
-				1.0 - T::UnderperformPercentileByPercentToKick::get() as f64 / 100.0;
+			let threshold_factor = 1.0 - underperformance_threshold_percent as f64 / 100.0; // bounded to [0,1] due to checks on underperformance_threshold_percent
 			let kick_threshold =
 				(threshold_factor * (blocks_created_at_percentile as f64)) as BlockCount;
 			log::info!(
 				"Session Performance stats: {}-th percentile: {} blocks. Evicting collators who produced less than {} blocks",
-				T::PerformancePercentileToConsiderForKick::get(),
+				percentile_for_kick,
 				blocks_created_at_percentile,
 				kick_threshold
 			);
 
 			// 5. Walk the percentile slice, call try_remove_candidate if a collator is under threshold
+			let mut removed_account_ids: Vec<T::AccountId> = Vec::new();
 			let current_candidate_ids = candidates
 				.into_iter()
 				.map(|i: CandidateInfo<T::AccountId, BalanceOf<T>>| i.who.clone())
 				.collect::<Vec<_>>();
-			let mut removed_account_ids: Vec<T::AccountId> = Vec::new();
-			let kick_candidates = collator_perf_this_session[..ordinal_rank] // ordinal-rank exclusive, the collator with percentile perf is safe
+			let kick_candidates = collator_perf_this_session[..index_at_ordinal_rank] // ordinal-rank exclusive, the collator at percentile is safe
 				.iter()
 				.map(|acc_info| acc_info.0.clone())
 				.collect::<Vec<_>>();
@@ -570,6 +579,7 @@ pub mod pallet {
 						Self::try_remove_candidate(&acc_id)
 							.and_then(|_| {
 								removed_account_ids.push(acc_id.clone());
+								log::info!("Removed collator of account {} as it only produced {} blocks this session", &acc_id, my_blocks_this_session);
 								Ok(())
 							})
 							.unwrap_or_else(|why| -> () {

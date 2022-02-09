@@ -365,7 +365,7 @@ fn kick_mechanism() {
 			.map(|c| c.who.clone())
 			.collect::<Vec<_>>()
 	};
-	let print_collator_perf = || {
+	let _print_collator_perf = || {
 		BlocksPerCollatorThisSession::<Test>::iter().for_each(|tuple| {
 			println!("{:?}", tuple);
 		});
