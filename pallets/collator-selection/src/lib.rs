@@ -579,7 +579,7 @@ pub mod pallet {
 						Self::try_remove_candidate(&acc_id)
 							.and_then(|_| {
 								removed_account_ids.push(acc_id.clone());
-								log::info!("Removed collator of account {} as it only produced {} blocks this session", &acc_id, my_blocks_this_session);
+								log::info!("Removed collator of account {:?} as it only produced {} blocks this session", &acc_id, my_blocks_this_session);
 								Ok(())
 							})
 							.unwrap_or_else(|why| -> () {
