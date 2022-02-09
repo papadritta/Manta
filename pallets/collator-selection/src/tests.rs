@@ -152,7 +152,6 @@ fn cannot_register_dupe_candidate() {
 			deposit: 10,
 		};
 		assert_eq!(CollatorSelection::candidates(), vec![addition]);
-		// assert_eq!(CollatorSelection::last_authored_block(3), 10);
 		assert_eq!(Balances::free_balance(3), 90);
 
 		// but no more
@@ -223,7 +222,6 @@ fn leave_intent() {
 		// bond is returned
 		assert_ok!(CollatorSelection::leave_intent(Origin::signed(3)));
 		assert_eq!(Balances::free_balance(3), 100);
-		// assert_eq!(CollatorSelection::last_authored_block(3), 0);
 	});
 }
 
@@ -245,7 +243,6 @@ fn authorship_event_handler() {
 		};
 
 		assert_eq!(CollatorSelection::candidates(), vec![collator]);
-		// assert_eq!(CollatorSelection::last_authored_block(4), 0);
 
 		// half of the pot goes to the collator who's the author (4 in tests).
 		assert_eq!(Balances::free_balance(4), 140);
@@ -273,7 +270,6 @@ fn fees_edgecases() {
 		};
 
 		assert_eq!(CollatorSelection::candidates(), vec![collator]);
-		// assert_eq!(CollatorSelection::last_authored_block(4), 0);
 		// Nothing received
 		assert_eq!(Balances::free_balance(4), 90);
 		// all fee stays
