@@ -555,7 +555,7 @@ pub mod pallet {
 			let kick_threshold =
 				(threshold_factor * (blocks_created_at_percentile as f64)) as BlockCount;
 			log::info!(
-				"Session Performance stats: {}-th percentile: {} blocks. Evicting collators who produced less than {} blocks",
+				"Session Performance stats: {}-th percentile: {:?} blocks. Evicting collators who produced less than {} blocks",
 				percentile_for_kick,
 				blocks_created_at_percentile,
 				kick_threshold
@@ -622,9 +622,9 @@ pub mod pallet {
 			debug_assert!(_success.is_ok());
 
 			// increment blocks this node authored
-			let mut authored_blocks = <BlocksPerCollatorThisSession<T>>::get(&author); // RAD: having this be an Option Query and throwing NotACandidate error would mess up testing code, hjow to resolve this?
-			authored_blocks = authored_blocks.saturating_add(1u32);
-			<BlocksPerCollatorThisSession<T>>::insert(&author, authored_blocks);
+			<BlocksPerCollatorThisSession<T>>::mutate(&author, |blocks| {
+				*blocks = blocks.saturating_add(1u32);
+			});
 
 			frame_system::Pallet::<T>::register_extra_weight_unchecked(
 				T::WeightInfo::note_author(),
