@@ -517,24 +517,24 @@ pub mod pallet {
 		/// Returns the removed AccountIds
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
-		) -> Vec<T::AccountId> {
+		) -> Option<Vec<T::AccountId>> {
 			// 0. Storage reads and precondition checks
 			if candidates.is_empty() {
-				return Vec::new(); // No candidates means we're running invulnerables only
+				return None; // No candidates means we're running invulnerables only
 			}
 			let percentile_for_kick = T::PerformancePercentileToConsiderForKick::get();
 			if percentile_for_kick == 0 {
-				return Vec::new(); // Selecting 0-th percentile disables kicking. Upper bound check in fn build()
+				return None; // Selecting 0-th percentile disables kicking. Upper bound check in fn build()
 			}
 			let underperformance_threshold_percent =
 				T::UnderperformPercentileByPercentToKick::get();
 			if underperformance_threshold_percent == 100 {
-				return Vec::new(); // tolerating 100% underperformance disables kicking
+				return None; // tolerating 100% underperformance disables kicking
 			}
 			let mut collator_perf_this_session =
 				<BlocksPerCollatorThisSession<T>>::iter().collect::<Vec<_>>();
 			if collator_perf_this_session.is_empty() {
-				return Vec::new(); // no validator performance recorded ( should not happen )
+				return None; // no validator performance recorded ( should not happen )
 			}
 
 			// 1. Sort collator performance list
@@ -589,7 +589,7 @@ pub mod pallet {
 					}
 				}
 			});
-			removed_account_ids
+			Some(removed_account_ids)
 		}
 
 		/// Reset the performance map to the currently active validators at 0 blocks
@@ -650,27 +650,31 @@ pub mod pallet {
 			let candidates = Self::candidates();
 			let candidates_len_before = candidates.len();
 			let removed_candidate_ids = Self::kick_stale_candidates(candidates.clone());
-			let active_candidate_ids = candidates
-				.iter()
-				.filter_map(|x| {
-					if removed_candidate_ids.contains(&x.who) {
-						None
-					} else {
-						Some(x.who.clone())
-					}
-				})
-				.collect();
+			let active_candidate_ids: Vec<_> = match removed_candidate_ids {
+				None => candidates.iter().map(|x| x.who.clone()).collect(),
+				Some(removed_candidate_ids) => candidates
+					.iter()
+					.filter_map(|x| {
+						if removed_candidate_ids.contains(&x.who) {
+							None
+						} else {
+							Some(x.who.clone())
+						}
+					})
+					.collect(),
+			};
+			let removed_candidate_count = candidates_len_before - active_candidate_ids.len();
 			let result = Self::assemble_collators(active_candidate_ids);
 
 			frame_system::Pallet::<T>::register_extra_weight_unchecked(
 				T::WeightInfo::new_session(
 					candidates_len_before as u32,
-					removed_candidate_ids.len() as u32,
+					removed_candidate_count as u32,
 				),
 				DispatchClass::Mandatory,
 			);
-			// Build performance map for the currently active validatorset in the just started session
-			Self::reset_collator_performance();
+
+			Self::reset_collator_performance(); // Reset performance map for the now starting session's active validatorset
 			Some(result)
 		}
 		fn start_session(_: SessionIndex) {
