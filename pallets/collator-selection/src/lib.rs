@@ -197,7 +197,7 @@ pub mod pallet {
 	}
 	#[pallet::storage]
 	pub(super) type BlocksPerCollatorThisSession<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>; // RAD: Note: AccountId is user-selectable, but protected by ED, is that enough?
+		StorageMap<_, Blake2_128Concat, T::AccountId, BlockCount, ValueQuery, StartingBlockCount>;
 
 	/// Desired number of candidates.
 	///
@@ -571,6 +571,7 @@ pub mod pallet {
 				.iter()
 				.map(|acc_info| acc_info.0.clone())
 				.collect::<Vec<_>>();
+
 			kick_candidates.into_iter().for_each(|acc_id| {
 				// If we're not a candidate we're invulnerable or already kicked
 				if current_candidate_ids.contains(&acc_id) {
