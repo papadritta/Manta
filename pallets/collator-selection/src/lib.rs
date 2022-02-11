@@ -83,7 +83,7 @@ pub mod pallet {
 		inherent::Vec,
 		pallet_prelude::*,
 		sp_runtime::{
-			traits::{AccountIdConversion, CheckedSub, Zero},
+			traits::{AccountIdConversion, CheckedSub, Saturating, Zero},
 			RuntimeDebug,
 		},
 		traits::{
@@ -542,18 +542,17 @@ pub mod pallet {
 			let collator_count = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated and unstable)
-			let index_at_ordinal_rank = (libm::ceil((percentile_for_kick as f64) / 100f64 * collator_count as f64 ) // can not overflow f64 as percentile_for_kick / 100 is guaranteed to yield a [0,1] value
-					as usize)
-				.saturating_sub(1); // -1 to accomodate 0-index counting, should not saturate due to precondition check
+			use sp_arithmetic::Percent;
+			let ordinal_rank = Percent::from_percent(percentile_for_kick).mul_ceil(collator_count);
+			let index_at_ordinal_rank = ordinal_rank.saturating_sub(1); // -1 to accomodate 0-index counting, should not saturate due to precondition check and round up multiplication
 
 			// 3. Block number at rank is the percentile and our kick performance benchmark
 			let blocks_created_at_percentile: BlockCount =
 				collator_perf_this_session[index_at_ordinal_rank].1;
 
 			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
-			let threshold_factor = 1.0 - underperformance_threshold_percent as f64 / 100.0; // bounded to [0,1] due to checks on underperformance_threshold_percent
-			let kick_threshold =
-				(threshold_factor * (blocks_created_at_percentile as f64)) as BlockCount;
+			let threshold_factor = Percent::one().saturating_sub(Percent::from_percent(underperformance_threshold_percent)); // bounded to [0,1] due to checks on underperformance_threshold_percent
+			let kick_threshold = (threshold_factor.mul_floor(blocks_created_at_percentile)) as BlockCount;
 			log::info!(
 				"Session Performance stats: {}-th percentile: {:?} blocks. Evicting collators who produced less than {} blocks",
 				percentile_for_kick,

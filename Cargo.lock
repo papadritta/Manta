@@ -4379,7 +4379,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "libm",
  "log",
  "pallet-aura",
  "pallet-authorship",
