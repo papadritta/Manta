@@ -537,12 +537,12 @@ pub mod pallet {
 				return None; // no validator performance recorded ( should not happen )
 			}
 
-			// 1. Sort collator performance list
+			// 1. Ascending sort of collator performance list by number of produced blocks
 			collator_perf_this_session.sort_unstable_by_key(|k| k.1);
-			let no_of_validators = collator_perf_this_session.len() as u8;
+			let collator_count = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated and unstable)
-			let index_at_ordinal_rank = (libm::ceil((percentile_for_kick as f64) / 100f64 * no_of_validators as f64 ) // can not overflow f64 as percentile_for_kick / 100 is guaranteed to yield a [0,1] value
+			let index_at_ordinal_rank = (libm::ceil((percentile_for_kick as f64) / 100f64 * collator_count as f64 ) // can not overflow f64 as percentile_for_kick / 100 is guaranteed to yield a [0,1] value
 					as usize)
 				.saturating_sub(1); // -1 to accomodate 0-index counting, should not saturate due to precondition check
 
@@ -563,20 +563,12 @@ pub mod pallet {
 
 			// 5. Walk the percentile slice, call try_remove_candidate if a collator is under threshold
 			let mut removed_account_ids: Vec<T::AccountId> = Vec::new();
-			let current_candidate_ids = candidates
-				.into_iter()
-				.map(|i: CandidateInfo<T::AccountId, BalanceOf<T>>| i.who.clone())
-				.collect::<Vec<_>>();
-			let kick_candidates = collator_perf_this_session[..index_at_ordinal_rank] // ordinal-rank exclusive, the collator at percentile is safe
-				.iter()
-				.map(|acc_info| acc_info.0.clone())
-				.collect::<Vec<_>>();
-
-			kick_candidates.into_iter().for_each(|acc_id| {
-				// If we're not a candidate we're invulnerable or already kicked
-				if current_candidate_ids.contains(&acc_id) {
-					let my_blocks_this_session = <BlocksPerCollatorThisSession<T>>::get(&acc_id); // RAD: read storage or find by iterating collator_perf_this_session vec, which is faster
-					if my_blocks_this_session <= kick_threshold {
+			let kick_candidates = &collator_perf_this_session[..index_at_ordinal_rank]; // ordinal-rank exclusive, the collator at percentile is safe
+			kick_candidates.iter().for_each(|(acc_id,my_blocks_this_session)| {
+				if *my_blocks_this_session <= kick_threshold {
+					// If our validator is not also a candidate we're invulnerable or already kicked
+					if let Some(_) = candidates.iter().find(|&x|{x.who == *acc_id})
+					{
 						Self::try_remove_candidate(&acc_id)
 							.and_then(|_| {
 								removed_account_ids.push(acc_id.clone());
@@ -587,7 +579,7 @@ pub mod pallet {
 								log::warn!("Failed to remove candidate {:?}", why);
 								debug_assert!(false, "failed to remove candidate {:?}", why);
 							});
-					}
+					} 
 				}
 			});
 			Some(removed_account_ids)
