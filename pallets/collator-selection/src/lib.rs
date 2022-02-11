@@ -517,8 +517,8 @@ pub mod pallet {
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
 		) -> Option<Vec<T::AccountId>> {
-			use	sp_arithmetic::Percent;
-			use	sp_runtime::PerThing;
+			use sp_arithmetic::Percent;
+			use sp_runtime::PerThing;
 
 			// 0. Storage reads and precondition checks
 			if candidates.is_empty() {
@@ -552,8 +552,10 @@ pub mod pallet {
 				collator_perf_this_session[index_at_ordinal_rank].1;
 
 			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
-			let threshold_factor = Percent::from_percent(underperformance_threshold_percent).left_from_one(); // bounded to [0,1] due to checks on underperformance_threshold_percent
-			let kick_threshold = (threshold_factor.mul_floor(blocks_created_at_percentile)) as BlockCount;
+			let threshold_factor =
+				Percent::from_percent(underperformance_threshold_percent).left_from_one(); // bounded to [0,1] due to checks on underperformance_threshold_percent
+			let kick_threshold =
+				(threshold_factor.mul_floor(blocks_created_at_percentile)) as BlockCount;
 			log::info!(
 				"Session Performance stats: {}-th percentile: {:?} blocks. Evicting collators who produced less than {} blocks",
 				percentile_for_kick,
