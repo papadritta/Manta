@@ -83,7 +83,7 @@ pub mod pallet {
 		inherent::Vec,
 		pallet_prelude::*,
 		sp_runtime::{
-			traits::{AccountIdConversion, CheckedSub, Saturating, Zero},
+			traits::{AccountIdConversion, CheckedSub, Convert, Zero},
 			RuntimeDebug,
 		},
 		traits::{
@@ -95,7 +95,6 @@ pub mod pallet {
 	};
 	use frame_system::{pallet_prelude::*, Config as SystemConfig};
 	use pallet_session::SessionManager;
-	use sp_runtime::traits::Convert;
 	use sp_staking::SessionIndex;
 
 	type BalanceOf<T> =
@@ -518,6 +517,9 @@ pub mod pallet {
 		pub fn kick_stale_candidates(
 			candidates: Vec<CandidateInfo<T::AccountId, BalanceOf<T>>>,
 		) -> Option<Vec<T::AccountId>> {
+			use	sp_arithmetic::Percent;
+			use	sp_runtime::PerThing;
+
 			// 0. Storage reads and precondition checks
 			if candidates.is_empty() {
 				return None; // No candidates means we're running invulnerables only
@@ -542,7 +544,6 @@ pub mod pallet {
 			let collator_count = collator_perf_this_session.len();
 
 			// 2. get percentile by _exclusive_ nearest rank method https://en.wikipedia.org/wiki/Percentile#The_nearest-rank_method (rust percentile API is feature gated and unstable)
-			use sp_arithmetic::Percent;
 			let ordinal_rank = Percent::from_percent(percentile_for_kick).mul_ceil(collator_count);
 			let index_at_ordinal_rank = ordinal_rank.saturating_sub(1); // -1 to accomodate 0-index counting, should not saturate due to precondition check and round up multiplication
 
