@@ -551,7 +551,7 @@ pub mod pallet {
 				collator_perf_this_session[index_at_ordinal_rank].1;
 
 			// 4. We kick if a collator produced UnderperformPercentileByPercentToKick fewer blocks than the percentile
-			let threshold_factor = Percent::one().saturating_sub(Percent::from_percent(underperformance_threshold_percent)); // bounded to [0,1] due to checks on underperformance_threshold_percent
+			let threshold_factor = Percent::from_percent(underperformance_threshold_percent).left_from_one(); // bounded to [0,1] due to checks on underperformance_threshold_percent
 			let kick_threshold = (threshold_factor.mul_floor(blocks_created_at_percentile)) as BlockCount;
 			log::info!(
 				"Session Performance stats: {}-th percentile: {:?} blocks. Evicting collators who produced less than {} blocks",
@@ -586,14 +586,12 @@ pub mod pallet {
 
 		/// Reset the performance map to the currently active validators at 0 blocks
 		pub fn reset_collator_performance() {
-			// XXX: intersect BPC map with validators and try_mutate to 0 oder or drop and recreate from scratch?
 			<BlocksPerCollatorThisSession<T>>::remove_all(None);
 			let validators = T::ValidatorRegistration::validators();
 			for validator_id in validators {
 				let account_id = T::AccountIdOf::convert(validator_id.clone().into());
 				<BlocksPerCollatorThisSession<T>>::insert(account_id.clone(), 0u32);
 			}
-			// RAD: These storage mutations count into the weight of new_session()
 		}
 	}
 
@@ -674,7 +672,6 @@ pub mod pallet {
 		}
 		fn end_session(_: SessionIndex) {
 			// we don't care.
-			// RAD: Should we do kicking on end_session instead?
 		}
 	}
 }
