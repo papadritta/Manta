@@ -579,7 +579,7 @@ pub mod pallet {
 								log::warn!("Failed to remove candidate {:?}", why);
 								debug_assert!(false, "failed to remove candidate {:?}", why);
 							});
-					} 
+					}
 				}
 			});
 			Some(removed_account_ids)
