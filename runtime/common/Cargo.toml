@@ -11,7 +11,7 @@ repository = 'https://github.com/Manta-Network/Manta/'
 codec = { package = "parity-scale-codec", version = "2.3.1", default-features = false }
 scale-info = { version = "1.0", default-features = false, features = [ "derive" ] }
 smallvec = "1.6.1"
-log = "0.4.14"
+log = "0.4.17"
 
 # manta-rs dependencies
 manta-accounting = { git = "https://github.com/manta-network/manta-rs.git", default-features = false }
